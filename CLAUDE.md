@@ -131,6 +131,19 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 - Solo: o LB dá a cada patch de solo ρ·(Σ energia do céu)/n_patches (não é
   lambertiano). Padrão nosso = lambertiano (ρ·G_horiz·Ω/π, físico), ~15% a
   mais de solo nas fachadas; `modelo_solo="ladybug"` para comparar.
+- Céu visível (`matriz_ceu(..., luz=True)`): eficácia luminosa de Perez 1990
+  (ε e Δ sempre radiométricos; água precipitável pelo ponto de orvalho). Em
+  Curitiba bate com os campos do EPW: difusa 1,04, direta normal 0,99.
+  O EPW do INMET é incoerente: GHI medida 26% acima de DHI + DNI·sen(alt);
+  nós (como Radiance/Honeybee) usamos DNI + DHI.
+- Motor B (`modulos/sol_luz/motor_b.py`): esquema do annual daylight do
+  Honeybee = C_dir·céu difuso + C_ref·(céu + sol nos patches) + sol direto
+  exato. Coeficientes por path tracing no Warp (cosseno, reflexão difusa com ρ
+  por face, vidro reto com τ(θ) de Fresnel n=1,52 calibrado para τ normal).
+  Última coluna = solo, L = ρ·E_horiz/π. Horas ocupadas 8–18 h (3650 h).
+  Métricas: DA300, UDI 100–3000, sDA (DA ≥ 50%), ASE (sol direto > 1000 lux
+  por > 250 h), DF com céu CIE encoberto. Sala 722 sensores × 8192 raios ×
+  5 reflexões: 8 ms. PENDENTE: validar contra o Honeybee-Radiance.
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).

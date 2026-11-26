@@ -63,9 +63,10 @@ DIAS_ANTES_DO_MES = (0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334)
 
 @dataclass
 class MatrizCeu:
-    difusa: torch.Tensor  # (P, H) radiância W/sr/m²
+    difusa: torch.Tensor  # (P, H) radiância W/sr/m² (ou luminância cd/m² se luz=True)
     direta: torch.Tensor  # (P, H)
     ceu: Ceu
+    unidade: str = "W/sr/m2"
 
     @property
     def total(self) -> torch.Tensor:
@@ -118,8 +119,11 @@ def luminancia_relativa(coef, cos_zeta, cos_gama) -> torch.Tensor:
 
 
 def matriz_ceu(
-    clima: Clima, ceu: Ceu, sol: PosicaoSolar | None = None, sol_patches: int = 4, device=None
+    clima: Clima, ceu: Ceu, sol: PosicaoSolar | None = None, sol_patches: int = 4, device=None,
+    luz: bool = False,
 ) -> MatrizCeu:
+    """luz=False: radiância solar (W/sr/m²), como gendaymtx -O1.
+    luz=True: luminância (cd/m²) pela eficácia de Perez; Σ L·Ω·cos dá lux."""
     sol = sol or posicao_solar_clima(clima)
     f64 = dict(dtype=torch.float64, device=device)
     dni = clima["dni"].to(**f64)
@@ -134,10 +138,11 @@ def matriz_ceu(
     H, P = dni.shape[0], v_patch.shape[0]
     difusa = torch.zeros(P, H, **f64)
     direta = torch.zeros(P, H, **f64)
+    unidade = "cd/m2" if luz else "W/sr/m2"
 
     dia = (alt > 0) & ((dhi > 0) | (dni > 0))
     if not dia.any():
-        return MatrizCeu(difusa, direta, ceu)
+        return MatrizCeu(difusa, direta, ceu, unidade)
     idx = dia.nonzero(as_tuple=True)[0]
     cos_gama = v_sol[idx] @ v_patch.T                   # (h, P)
 
@@ -166,4 +171,43 @@ def matriz_ceu(
         bloco.scatter_add_(1, p_k, rad)
         direta[:, i] = bloco.T
 
-    return MatrizCeu(difusa, direta, ceu)
+    if luz:  # W/m² -> lux pela eficácia de Perez (ε e Δ continuam radiométricos)
+        k_dif, k_dir = eficacia_luminosa(clima, sol, device=device)
+        difusa = difusa * k_dif[None, :]
+        direta = direta * k_dir[None, :]
+    return MatrizCeu(difusa, direta, ceu, unidade)
+
+
+# Perez et al. (1990), eficácia luminosa (lm/W) por faixa de ε: [a, b, c, d]
+EFICACIA_DIFUSA = (
+    (97.24, -0.46, 12.00, -8.91), (107.22, 1.15, 0.59, -3.95), (104.97, 2.96, -5.53, -8.77),
+    (102.39, 5.59, -13.95, -13.90), (100.71, 5.94, -22.75, -23.74), (106.42, 3.83, -36.15, -28.83),
+    (141.88, 1.90, -53.24, -14.03), (152.23, 0.35, -45.27, -7.98),
+)
+EFICACIA_DIRETA = (
+    (57.20, -4.55, -2.98, 117.12), (98.99, -3.46, -1.21, 12.38), (109.83, -4.90, -1.71, -8.81),
+    (110.34, -5.84, -1.99, -4.56), (106.36, -3.97, -1.75, -6.16), (107.19, -1.25, -1.51, -26.73),
+    (105.75, 0.77, -1.26, -34.44), (101.18, 1.58, -1.10, -8.29),
+)
+
+
+def eficacia_luminosa(clima: Clima, sol: PosicaoSolar, device=None):
+    """(H,) eficácias luminosas difusa e direta (lm/W), Perez et al. 1990.
+
+    K_dif = a + b·W + c·cos Z + d·ln Δ
+    K_dir = max(0, a + b·W + c·exp(5,73·Z − 5) + d·Δ)
+    W = água precipitável (cm) estimada do ponto de orvalho: exp(0,07·Td − 0,075)
+    """
+    f64 = dict(dtype=torch.float64, device=device)
+    dni = clima["dni"].to(**f64)
+    dhi = clima["dhi"].to(**f64)
+    zen = torch.deg2rad(90.0 - sol.altitude.to(**f64)).clamp(max=math.radians(89.9))
+    dia_do_ano = torch.tensor(DIAS_ANTES_DO_MES, **f64)[clima.mes.to(device) - 1] + clima.dia.to(**f64)
+    eps, delta = parametros_perez(zen, dni, dhi.clamp(min=1e-6), dia_do_ano)
+    faixa = torch.bucketize(eps, torch.tensor(LIMITES_EPS, **f64))
+    w = torch.exp(0.07 * clima["temp_orvalho"].to(**f64) - 0.075)
+    a, b, c, d = torch.tensor(EFICACIA_DIFUSA, **f64)[faixa].unbind(-1)
+    k_dif = a + b * w + c * torch.cos(zen) + d * torch.log(delta)
+    a, b, c, d = torch.tensor(EFICACIA_DIRETA, **f64)[faixa].unbind(-1)
+    k_dir = (a + b * w + c * torch.exp(5.73 * zen - 5) + d * delta).clamp(min=0)
+    return k_dif.clamp(min=0), k_dir
