@@ -176,10 +176,16 @@ def _k_sol_direto(ids: wp.array(dtype=wp.uint64), var: wp.array(dtype=wp.int32),
 # ------------------------------------------------------------------ interface
 @dataclass
 class Materiais:
-    """Por face de cada variante (concatenadas na ordem das variantes)."""
+    """Por face de cada variante (concatenadas na ordem das variantes).
+
+    Valores fotópicos (luz visível). Os melanópicos são opcionais: se None, o
+    material é neutro (mesma refletância/transmitância nos dois canais).
+    """
     refletancia: torch.Tensor     # (F_total,) 0..1, faces opacas
     transmitancia: torch.Tensor   # (F_total,) τ normal; > 0 = vidro
     base_face: torch.Tensor       # (V,) índice da 1ª face de cada variante
+    refletancia_mel: torch.Tensor | None = None
+    transmitancia_mel: torch.Tensor | None = None
 
     @staticmethod
     def de_listas(listas: list[tuple[torch.Tensor, torch.Tensor]]) -> "Materiais":
@@ -191,6 +197,12 @@ class Materiais:
         return Materiais(torch.cat([r for r, _ in listas]).float(),
                          torch.cat([t for _, t in listas]).float(),
                          torch.tensor(base, dtype=torch.int32))
+
+    def melanopico(self) -> "Materiais":
+        """Mesmos materiais com as propriedades do canal melanópico."""
+        r = self.refletancia if self.refletancia_mel is None else self.refletancia_mel.float()
+        t = self.transmitancia if self.transmitancia_mel is None else self.transmitancia_mel.float()
+        return Materiais(r, t, self.base_face)
 
 
 @dataclass
@@ -240,18 +252,22 @@ def fator_sol_direto(cena: Cena, materiais: Materiais, pontos, normais, vetores_
 
 def iluminancia_anual(coef: Coeficientes, matriz_luz: MatrizCeu, fator_sol: torch.Tensor,
                       iluminancia_normal_sol: torch.Tensor, horas_sol: torch.Tensor,
-                      refletancia_solo: float = 0.2, so_sol_direto: bool = False) -> torch.Tensor:
-    """(S, H) lux.
+                      refletancia_solo: float = 0.2, so_sol_direto: bool = False,
+                      der_ceu: float = 1.0, der_sol: float = 1.0) -> torch.Tensor:
+    """(S, H) lux (fotópico) ou m-EDI (melanópico, ver `iluminancia_melanopica_anual`).
 
     matriz_luz: matriz de céu com luz=True (cd/m²).
     fator_sol: (S, T) de `fator_sol_direto` para as T horas em `horas_sol` (índices).
     iluminancia_normal_sol: (H,) lux do sol direto (DNI · K_dir).
     so_sol_direto: só o sol direto (para o ASE).
+    der_ceu, der_sol: razão de eficácia melanópica (DER, relativa ao D65) do céu
+      difuso e do sol; 1,0 = fotópico / espectro igual ao D65.
     """
     dev = coef.direto.device
     H = matriz_luz.difusa.shape[1]
     e = torch.zeros(coef.direto.shape[0], H, dtype=torch.float32, device=dev)
-    e[:, horas_sol] = fator_sol * iluminancia_normal_sol.to(device=dev, dtype=torch.float32)[horas_sol]
+    e[:, horas_sol] = fator_sol * der_sol * \
+        iluminancia_normal_sol.to(device=dev, dtype=torch.float32)[horas_sol]
     if so_sol_direto:
         return e
     ceu = matriz_luz.ceu
@@ -263,13 +279,67 @@ def iluminancia_anual(coef: Coeficientes, matriz_luz: MatrizCeu, fator_sol: torc
         e_h = (L * (om * cz)[:, None]).sum(0, keepdim=True)
         return torch.cat([L, refletancia_solo * e_h / math.pi]).float()
 
-    dif = com_solo(matriz_luz.difusa)
-    tot = com_solo(matriz_luz.total)
+    dif = com_solo(matriz_luz.difusa * der_ceu)
+    tot = com_solo(matriz_luz.difusa * der_ceu + matriz_luz.direta * der_sol)
     # sol na visão direta: só pelo cálculo exato acima; o sol direto que chega
     # ao solo de fora entra pela linha do solo do céu total
     dif_mais_solo_do_sol = dif.clone()
     dif_mais_solo_do_sol[-1] = tot[-1]
     return e + coef.direto @ dif_mais_solo_do_sol + coef.refletido @ tot
+
+
+# ------------------------------------------------------------------ melanópico (1d)
+EML_POR_MEDI = 1.104  # EML (WELL) = 1,104 × m-EDI (CIE S 026); para D65, m-EDI = lux
+
+
+def iluminancia_melanopica_anual(coef_mel: Coeficientes, matriz_luz: MatrizCeu,
+                                 fator_sol_mel: torch.Tensor, iluminancia_normal_sol,
+                                 horas_sol, der_ceu: float = 1.0, der_sol: float = 1.0,
+                                 refletancia_solo_mel: float = 0.2) -> torch.Tensor:
+    """(S, H) m-EDI em lux (iluminância melanópica equivalente D65, CIE S 026).
+
+    coef_mel e fator_sol_mel calculados com `materiais.melanopico()`.
+    der_ceu / der_sol: DER do céu difuso e do sol. Padrão 1,0 (= D65): sem dados
+    de espectro, supõe-se luz do tipo D65; passe valores medidos ou da literatura.
+    """
+    return iluminancia_anual(coef_mel, matriz_luz, fator_sol_mel, iluminancia_normal_sol,
+                             horas_sol, refletancia_solo=refletancia_solo_mel,
+                             der_ceu=der_ceu, der_sol=der_sol)
+
+
+def eml(m_edi: torch.Tensor) -> torch.Tensor:
+    """Equivalent Melanopic Lux (WELL v2) a partir da m-EDI."""
+    return m_edi * EML_POR_MEDI
+
+
+def sensores_olho(pontos_xy: torch.Tensor, altura: float = 1.2, n_direcoes: int = 4):
+    """Sensores verticais na altura dos olhos: (S·n, 3) pontos e normais
+    horizontais (padrão N, L, S, O). Retorna também o índice do ponto de origem."""
+    ang = torch.arange(n_direcoes, dtype=torch.float64) * (2 * math.pi / n_direcoes)
+    dirs = torch.stack([torch.sin(ang), torch.cos(ang), torch.zeros_like(ang)], dim=1)
+    p = pontos_xy.to(torch.float64)
+    p3 = torch.cat([p[:, :2], torch.full((p.shape[0], 1), altura, dtype=torch.float64)], dim=1)
+    pontos = p3.repeat_interleave(n_direcoes, dim=0)
+    normais = dirs.repeat(p.shape[0], 1)
+    origem = torch.arange(p.shape[0]).repeat_interleave(n_direcoes)
+    return pontos, normais, origem
+
+
+def metricas_circadianas(m_edi: torch.Tensor, clima, limite_medi: float = 250.0,
+                         horas_min_por_dia: int = 4, inicio: float = 8.0, fim: float = 18.0):
+    """Por sensor:
+      horas_pct — % das horas ocupadas com m-EDI ≥ limite
+      dias_pct  — % dos dias com pelo menos `horas_min_por_dia` horas ≥ limite
+    Limite padrão 250 lux m-EDI (Brown et al. 2022, recomendação para o dia).
+    """
+    occ = horas_ocupadas(clima, inicio, fim).to(m_edi.device)
+    acima = (m_edi >= limite_medi) & occ[None, :]
+    n_dias = m_edi.shape[1] // 24
+    por_dia = acima[:, : n_dias * 24].reshape(m_edi.shape[0], n_dias, 24).sum(dim=2)
+    return {
+        "horas_pct": acima.float().sum(1) / occ.sum() * 100,
+        "dias_pct": (por_dia >= horas_min_por_dia).float().mean(1) * 100,
+    }
 
 
 # ------------------------------------------------------------------ métricas

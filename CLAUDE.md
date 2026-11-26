@@ -48,7 +48,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
     fotovoltaico. Validação contra o Ladybug (Incident Radiation, Sunlight Hours).
   - [x] 1c · Motor B: matriz de coeficientes com reflexões, depois fator de luz
     diurna, DA, sDA, UDI e ASE. Validação contra o Honeybee-Radiance.
-  - [ ] 1d · EML: fatores melanópicos sobre o motor B.
+  - [x] 1d · EML: fatores melanópicos sobre o motor B.
   - [ ] 1e · Motor C: render olho-de-peixe e fórmula do DGP (Wienold).
     Validação contra o evalglare.
   - [ ] 1f · Integração: tudo no contrato de módulo (`sol_luz`), com os níveis
@@ -151,6 +151,14 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   sensores vêm do próprio HB Model exportado (`sala_hb.json`). No GH a grade
   entra pelo HB Assign Grids and Views. ASE não comparado direto com o HB
   (usa o mesmo sol direto já validado nas horas de sol).
+- Melanópico (1d, `motor_b.py`): canal extra do motor B. Materiais com
+  ρ_mel/τ_mel opcionais (None = neutro); céu difuso e sol com DER (razão de
+  eficácia melanópica relativa ao D65) separados, padrão 1,0 = supõe D65
+  (não achei tabela confiável de DER por espectro; passar valores da
+  literatura quando houver). Grandeza m-EDI (CIE S 026); EML = 1,104·m-EDI.
+  Sensores verticais a 1,2 m (`sensores_olho`, 4 direções). Métrica padrão:
+  m-EDI ≥ 250 lux (Brown et al. 2022) em % das horas e % dos dias com ≥ 4 h.
+  Validação analítica (piso colorido, DER separando céu e sol).
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).
