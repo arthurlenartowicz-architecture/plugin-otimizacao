@@ -30,6 +30,19 @@ import os
 
 import Rhino
 import Rhino.Geometry as rg
+import System
+
+
+def _coagir(o, tipo):
+    """No GhPython (dica de tipo padrão) a geometria chega como Guid; converte."""
+    if isinstance(o, System.Guid):
+        import rhinoscriptsyntax as rs
+        if tipo == "ponto":
+            return rs.coerce3dpoint(o)
+        if tipo == "vetor":
+            return rs.coerce3dvector(o)
+        return rs.coercegeometry(o)
+    return o
 
 
 def _escala_para_metros():
@@ -42,6 +55,7 @@ def _para_malha(objs):
     malha = rg.Mesh()
     params = rg.MeshingParameters.Default
     for o in objs or []:
+        o = _coagir(o, "geometria")
         if o is None:
             continue
         if isinstance(o, rg.Mesh):
@@ -121,13 +135,14 @@ def executar():
         msgs.append(_gravar(os.path.join(destino, "contexto.json"), _malha_json(m, k)))
 
     if pontos:
-        sens = {"pontos": [[p.X * k, p.Y * k, p.Z * k] for p in pontos]}
+        pts = [_coagir(p, "ponto") for p in pontos]
+        sens = {"pontos": [[p.X * k, p.Y * k, p.Z * k] for p in pts]}
         if normais:
             if len(normais) != len(pontos):
                 return "ERRO: 'normais' e 'pontos' têm tamanhos diferentes."
             ns = []
             for n in normais:
-                n = rg.Vector3d(n)
+                n = rg.Vector3d(_coagir(n, "vetor"))
                 n.Unitize()
                 ns.append([n.X, n.Y, n.Z])
             sens["normais"] = ns

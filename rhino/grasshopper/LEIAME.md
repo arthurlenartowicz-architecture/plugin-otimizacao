@@ -4,7 +4,20 @@
 sensores, o sol e o céu do Ladybug (e, depois, os resultados do Ladybug), para
 os testes do motor compararem.
 
-## Montagem no Grasshopper
+## Montagem automática (recomendado)
+
+Na linha de comando do Rhino 8:
+
+```
+_-RunPythonScript "C:\Users\PC\Documents\plugin-otimizacao\rhino\grasshopper\montar_definicao.py"
+```
+
+O script abre o Grasshopper, monta a definição inteira (componente GhPython
+com o código, painéis preenchidos, botão, log) e salva
+`exportar_referencias.gh`. Nas próximas vezes, abra só o `.gh`. Se mudar o
+`exportar_referencias.py`, rode o script de novo para atualizar o código.
+
+## Montagem manual
 
 1. Coloque um componente **Script** (Python 3) ou **GhPython** e cole o código.
 2. Crie as entradas `pasta`, `caso`, `geometria`, `contexto`, `pontos`,
