@@ -15,6 +15,7 @@ data/cache/
 *.vti
 resultados/
 runs/
+dados_treino/
 
 # Modelos de IA treinados
 *.pt
@@ -23,13 +24,14 @@ runs/
 *.onnx
 
 # C# / Rhino plugin
-plugin-rhino/**/bin/
-plugin-rhino/**/obj/
+rhino/**/bin/
+rhino/**/obj/
 *.rhp
 *.user
 .vs/
 
-# Rhino
+# Rhino (modelos .3dm não são versionados)
+*.3dm
 *.3dmbak
 *.rhl
 

@@ -9,13 +9,13 @@ substituta (PhysicsNeMo) onde a física é cara.
 ```
 src/otimiza/
   nucleo/        cena em lote, clima EPW, cache, dependências
-  modulos/       um pacote por objetivo, todos com o mesmo contrato
-    solar/ termico/ vento/ estrutura/ carbono/ programa/
-  otimizador/    NSGA-II/III
-  substituto/    modelos de IA substitutos (PhysicsNeMo)
-plugin-rhino/    plugin C# para Rhino 8
+  modulos/       um pacote por tema, todos com o mesmo contrato
+    sol_luz/ termico/ vento/ estrutura/ acustica/ carbono_custo/ programa/
+  otimizacao/    NSGA-II/III, RVEA, análise do Pareto
+  ia/            modelos substitutos (PhysicsNeMo)
+rhino/           plugin C# para Rhino 8
 scripts/         utilitários (check_gpu.py)
-tests/           testes
+testes/          validação de cada módulo
 data/epw/        arquivos climáticos (não versionados)
 docs/ notebooks/
 ```
