@@ -159,6 +159,14 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   Sensores verticais a 1,2 m (`sensores_olho`, 4 direções). Métrica padrão:
   m-EDI ≥ 250 lux (Brown et al. 2022) em % das horas e % dos dias com ≥ 4 h.
   Validação analítica (piso colorido, DER separando céu e sol).
+- Motor C (1e, `motor_c.py`): imagem olho-de-peixe angular 180° (n × n),
+  coeficientes por pixel (mesmo path tracer, peso 1/M = luminância), sol como
+  fonte à parte do tamanho real (ω = 6,8e-5 sr). DGP de Wienold 2006; fontes
+  = pixels > 2000 cd/m² (como dcglare/HB imageless; < 100 = fator × média);
+  P de Guth acima e Iwata abaixo da linha de visão (máx 16); correção de baixa
+  luz (Ev < 1000) opcional. GA = % horas ocupadas com DGP < 0,4. 8 vistas ×
+  12,9 mil pixels × 64 amostras: 12 ms. PENDENTE: comparar com o HB Imageless
+  Annual Glare (2º modelo HB no .gh, grade de 8 vistas).
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).
