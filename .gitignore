@@ -1,0 +1,41 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Dados grandes / gerados
+data/epw/*.epw
+data/cache/
+*.npz
+*.h5
+*.vtk
+*.vti
+resultados/
+runs/
+
+# Modelos de IA treinados
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# C# / Rhino plugin
+plugin-rhino/**/bin/
+plugin-rhino/**/obj/
+*.rhp
+*.user
+.vs/
+
+# Rhino
+*.3dmbak
+*.rhl
+
+# Sistema / editores
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+.env
