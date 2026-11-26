@@ -86,3 +86,8 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 - Convenções: azimute a partir do norte, horário; vetor solar aponta do ponto
   para o sol, eixos do Rhino (x leste, y norte, z cima) — oposto ao Ladybug.
 - EPW (`nucleo/clima.py`): exige 8760 linhas; lê em UTF-8 ou latin-1.
+- Céu (`nucleo/ceu.py`): lógica do `reinhartb.cal` (MF=1 Tregenza 145,
+  MF=2 Reinhart 577), sem patch de chão. Ordem assumida: faixas do horizonte
+  ao zênite, 1º patch centrado no norte, seguindo para o leste.
+  PENDENTE: confirmar a ordem contra o Ladybug/Honeybee (script do GH) antes
+  de comparar matrizes de céu.
