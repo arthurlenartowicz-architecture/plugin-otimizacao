@@ -40,7 +40,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 ## Etapas
 - [x] 0. Ambiente: CUDA, PyTorch, Warp, teste de GPU, estrutura, git
 - [ ] 1. Sol e luz
-  - [ ] 1a · Fundação: leitor de EPW, posição solar, subdivisão do céu
+  - [x] 1a · Fundação: leitor de EPW, posição solar, subdivisão do céu
     (Tregenza/Reinhart), matriz de céu anual (modelo de Perez, equivalente ao
     `gendaymtx` do Radiance), malhas de sensores, estrutura de aceleração (BVH)
     e raycasting no Warp, importação da geometria do Rhino.
@@ -104,6 +104,17 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   dos patches (integral fina piorou) e usa o sol no meio da hora (na hora
   cheia o rms sobe para 6,5%). Diferença residual aceita; rever se a 1b
   (radiação em fachadas) passar de ±5% contra o Ladybug.
+- Geometria (`nucleo/geometria.py`): malhas trianguladas (vertices, faces) em
+  metros. Sensores: cada triângulo dividido em n² sub-triângulos iguais
+  (n = maior aresta / espaçamento), sensor no centro de cada um, com área
+  igual → somar valor × área dá o total. Para comparar com o Ladybug, usar os
+  pontos exportados do LB Generate Point Grid, não os nossos.
+- Raios (`nucleo/raios.py`): `Cena` = um `wp.Mesh` (BVH do Warp) por
+  variante; cada raio leva o índice da variante, tudo num só kernel.
+  Geometria em float32 na GPU, origem afastada 1e-4 m. `atualizar()` move
+  vértices e faz refit da BVH (mesma topologia, mais rápido que reconstruir).
+  Benchmark: ~1,6 bilhão de raios/s (64 variantes, 645 mil sensores × 577
+  patches em 0,23 s).
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).
