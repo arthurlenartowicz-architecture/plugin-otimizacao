@@ -78,8 +78,10 @@ def sensores_de_malha(
 ) -> Sensores:
     """Sensores distribuídos sobre a malha, ~1 a cada `espacamento` metros.
 
-    Cada triângulo é subdividido em n² triângulos iguais (n = maior aresta /
-    espaçamento, arredondado para cima) e um sensor vai no centro de cada um.
+    Cada triângulo é subdividido em n² triângulos iguais e um sensor vai no
+    centro de cada um. n é escolhido para que cada sensor represente ~espaçamento²
+    de área (n = √área / espaçamento), sem deixar sub-triângulos compridos demais
+    em triângulos finos (n ≥ maior aresta / (3·espaçamento)).
     Assim todo sensor representa a mesma fração da área do seu triângulo, e
     somar valor × área dá o total na superfície.
     """
@@ -88,7 +90,8 @@ def sensores_de_malha(
     normal_f, area_f = normais_e_areas(vertices, faces)
     a, b, c = (vertices[faces[:, i]] for i in range(3))
     aresta = torch.stack([(b - a).norm(dim=1), (c - b).norm(dim=1), (a - c).norm(dim=1)], 1).amax(1)
-    n_div = torch.ceil(aresta / espacamento).clamp(min=1).long()
+    n_div = torch.ceil(torch.maximum(area_f.sqrt() / espacamento,
+                                     aresta / (3 * espacamento))).clamp(min=1).long()
 
     pontos, face_idx, area = [], [], []
     # agrupa triângulos com o mesmo n para fazer tudo em lote

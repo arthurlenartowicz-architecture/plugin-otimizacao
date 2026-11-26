@@ -166,6 +166,7 @@ class Vistas:
     c_ref: torch.Tensor     # (V, N, P + 1)
     posicao: torch.Tensor   # (V, N) índice de posição de cada pixel
     cos_frente: torch.Tensor  # (N,) cos θ de cada pixel (em relação à frente)
+    variante: torch.Tensor | int | None = None  # variante de cada vista (cena em lote)
 
 
 def coeficientes_vistas(cena: Cena, materiais: Materiais, ceu: Ceu, olho, frente, variante=None,
@@ -189,7 +190,7 @@ def coeficientes_vistas(cena: Cena, materiais: Materiais, ceu: Ceu, olho, frente
         wp.from_torch(c_dir), wp.from_torch(c_ref)])
     pos = indice_de_posicao(g.vista).float().to(dev).expand(V, N).contiguous()
     return Vistas(olho, frente, g, c_dir.reshape(V, N, P + 1), c_ref.reshape(V, N, P + 1),
-                  pos, g.vista[:, 2].float().to(dev))
+                  pos, g.vista[:, 2].float().to(dev), variante)
 
 
 def dgp(ev: torch.Tensor, soma_fontes: torch.Tensor, correcao_baixa_luz: bool = True):
@@ -250,7 +251,8 @@ def colunas_ceu(matriz_luz: MatrizCeu, horas, refletancia_solo: float = 0.2):
 
 def sol_nas_vistas(cena: Cena, materiais: Materiais, vistas: Vistas, vetores_sol, e_normal_sol):
     """(ev_sol, e_tau, p_sol), cada um (V, T) — ver `avaliar_imagem`."""
-    fator = fator_sol_direto(cena, materiais, vistas.olho, vistas.frente, vetores_sol)  # τ·cos
+    fator = fator_sol_direto(cena, materiais, vistas.olho, vistas.frente, vetores_sol,
+                             variante=vistas.variante)  # τ·cos
     d, c, f = base_da_vista(vistas.frente.to(torch.float64))
     vs = vetores_sol.to(torch.float64)
     na_vista = torch.stack([vs @ d.T, vs @ c.T, vs @ f.T], dim=-1).transpose(0, 1)  # (V, T, 3)

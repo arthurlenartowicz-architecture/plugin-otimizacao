@@ -39,7 +39,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 
 ## Etapas
 - [x] 0. Ambiente: CUDA, PyTorch, Warp, teste de GPU, estrutura, git
-- [ ] 1. Sol e luz
+- [x] 1. Sol e luz
   - [x] 1a · Fundação: leitor de EPW, posição solar, subdivisão do céu
     (Tregenza/Reinhart), matriz de céu anual (modelo de Perez, equivalente ao
     `gendaymtx` do Radiance), malhas de sensores, estrutura de aceleração (BVH)
@@ -51,7 +51,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   - [x] 1d · EML: fatores melanópicos sobre o motor B.
   - [x] 1e · Motor C: render olho-de-peixe e fórmula do DGP (Wienold).
     Validação contra o evalglare.
-  - [ ] 1f · Integração: tudo no contrato de módulo (`sol_luz`), com os níveis
+  - [x] 1f · Integração: tudo no contrato de módulo (`sol_luz`), com os níveis
     rápido, padrão e validação, e um benchmark de quantas variantes por segundo
     a 5070 aguenta.
 - [ ] 2. Estrutura: FEM de barras em lote (validar contra o Karamba)
@@ -172,6 +172,24 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   O dcglare aplica a correção de baixa luz (padrão ligado). Erros grandes
   isolados = sol rente à borda da janela (vê/não vê o disco). O HB grava
   `<grade>.dgp` (vistas × horas com sol) e `sun-up-hours.txt` (meio da hora).
+- Integração (1f): `nucleo/contrato.py` (Metrica, Modulo, registro),
+  `nucleo/cena.py` (CenaLote: variantes com rótulo e material por face —
+  fachada, vidro, cobertura, piso, interno, contexto, entorno),
+  `nucleo/cache.py` (sol e matrizes de céu por clima, compartilhados),
+  `nucleo/motor.py` (avaliar "modulo.metrica", dependências em ordem;
+  `avaliar_problema` devolve objetivos para minimizar + violação),
+  `nucleo/prototipos.py` (prédio paramétrico com janelas por fachada).
+  `modulos/sol_luz/modulo.py`: radiacao_fachada, radiacao_cobertura, fv,
+  perda_sol_entorno, da, sda, udi, ase, df, medi_horas, ga; só roda o grupo
+  das métricas pedidas. Sensores internos a 0,8 m (normal para cima), olhos a
+  1,2 m. Níveis rápido/padrão/validação mudam grade, raios, reflexões, MF e
+  resolução do olho-de-peixe (tabela NIVEIS no módulo).
+- `sensores_de_malha` corrigido: n = √área/espaçamento (antes usava a maior
+  aresta, que num retângulo é a diagonal e dava ~4× mais sensores).
+- Benchmark 1f (64 variantes de sala com torre, RTX 5070): rápido 27
+  variantes/s com tudo (sem GA > 900/s); padrão 7,7/s com tudo (sem GA >
+  200/s). O GA domina; se pesar no otimizador, reduzir horas (amostras
+  representativas) ou vistas.
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).
