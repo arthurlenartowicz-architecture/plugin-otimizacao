@@ -1,0 +1,10 @@
+[project]
+name = "otimiza"
+version = "0.0.1"
+description = "Motor de otimização na GPU para Rhino (TCC)"
+requires-python = ">=3.12"
+dependencies = ["torch", "warp-lang", "numpy"]
+
+[tool.pytest.ini_options]
+testpaths = ["testes"]
+pythonpath = ["src"]

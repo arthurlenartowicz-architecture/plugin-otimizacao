@@ -78,3 +78,11 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   `otimizacao/`, `ia/`); `rhino/` e `testes/` ficam na raiz.
 - Repositório privado: github.com/arthurlenartowicz-architecture/plugin-otimizacao
   (branch `main`).
+- Testes: `.venv\Scripts\python.exe -m pytest` (config no `pyproject.toml`).
+- Posição solar (`nucleo/sol.py`): algoritmo da NOAA/Meeus em float64, com
+  refração. Erro contra o caso de exemplo do SPA/NREL: 0,0007° zênite,
+  0,0023° azimute. Ano fixo 2017 (não bissexto), como o Ladybug. Para dados
+  horários do EPW, o sol é calculado no meio da hora (h − 0,5).
+- Convenções: azimute a partir do norte, horário; vetor solar aponta do ponto
+  para o sol, eixos do Rhino (x leste, y norte, z cima) — oposto ao Ladybug.
+- EPW (`nucleo/clima.py`): exige 8760 linhas; lê em UTF-8 ou latin-1.
