@@ -308,10 +308,11 @@ def montar_honeybee(gh, doc, p_epw, entrada):
     janelas = criar_por_nome(gh, doc, "HB Apertures by Ratio", x0 + 330, y0)
     grade = criar_por_nome(gh, doc, "HB Sensor Grid from Rooms", x0 + 510, y0 + 120)
     modelo = criar_por_nome(gh, doc, "HB Model", x0 + 700, y0)
+    atribuir = criar_por_nome(gh, doc, "HB Assign Grids and Views", x0 + 830, y0 + 60)
     wea = criar_por_nome(gh, doc, "HB Wea From EPW", x0 + 510, y0 + 260)
-    anual = criar_por_nome(gh, doc, "HB Annual Daylight", x0 + 900, y0)
-    df = criar_por_nome(gh, doc, "HB Daylight Factor", x0 + 900, y0 + 260)
-    if None in (room, janelas, grade, modelo, wea, anual, df):
+    anual = criar_por_nome(gh, doc, "HB Annual Daylight", x0 + 1000, y0)
+    df = criar_por_nome(gh, doc, "HB Daylight Factor", x0 + 1000, y0 + 260)
+    if None in (room, janelas, grade, modelo, atribuir, wea, anual, df):
         print("Aviso: estudo do Honeybee incompleto; ligue o que faltar à mão.")
 
     p_ratio = painel(gh, doc, "0.4", "razão janela", x0 + 150, y0 + 80, 60)
@@ -329,8 +330,16 @@ def montar_honeybee(gh, doc, p_epw, entrada):
         if comp is not None:
             ligar(achar_param(comp.Params.Input, nome), origem)
 
-    def sai(comp, nome):
-        return achar_param(comp.Params.Output, nome) if comp is not None else None
+    def sai(comp, *nomes):
+        """Saída pelo primeiro nome que existir (as versões do HB variam)."""
+        if comp is None:
+            return None
+        for n in nomes:
+            for p in comp.Params.Output:
+                if n.strip("_").lower() in (p.NickName.strip("_").lower(), p.Name.strip("_").lower()):
+                    return p
+        print("Aviso: saída " + "/".join(nomes) + " não encontrada em " + comp.Name)
+        return None
 
     entra(room, "_solid", sala)
     entra(janelas, "_hb_objs", sai(room, "room"))
@@ -340,8 +349,10 @@ def montar_honeybee(gh, doc, p_epw, entrada):
     entra(grade, "_grid_size", p_grade)
     entra(grade, "_dist_floor_", p_altura)
     entra(modelo, "rooms_", salas)
-    entra(modelo, "grids_", sai(grade, "grid"))
-    m = sai(modelo, "model")
+    # a grade entra pelo HB Assign Grids and Views (o HB Model nem sempre tem grids_)
+    entra(atribuir, "_model", sai(modelo, "model"))
+    entra(atribuir, "grids_", sai(grade, "grid", "grids"))
+    m = sai(atribuir, "model")
     entra(wea, "_epw_file", p_epw)
     entra(anual, "_model", m)
     entra(anual, "_wea", sai(wea, "wea"))
