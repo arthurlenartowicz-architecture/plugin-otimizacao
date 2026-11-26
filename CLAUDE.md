@@ -89,5 +89,10 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 - Céu (`nucleo/ceu.py`): lógica do `reinhartb.cal` (MF=1 Tregenza 145,
   MF=2 Reinhart 577), sem patch de chão. Ordem assumida: faixas do horizonte
   ao zênite, 1º patch centrado no norte, seguindo para o leste.
-  PENDENTE: confirmar a ordem contra o Ladybug/Honeybee (script do GH) antes
-  de comparar matrizes de céu.
+  Confirmado contra o Ladybug (`view_sphere`, caso curitiba): os 145 e os 577
+  patches na mesma ordem; os vetores do Ladybug também apontam para cima.
+- Sol validado contra o Ladybug (Curitiba, 8760 h): erro máx. 0,0014° na
+  altitude e 0,0024° no azimute.
+- Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
+  definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
+  são o gabarito dos testes).
