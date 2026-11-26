@@ -15,6 +15,13 @@ Python 3, ou o GhPython antigo; funciona nos dois). Crie estas ENTRADAS
   resultados     float      (lista, opcional) resultado do Ladybug por sensor
   nome_resultado str        (opcional) ex.: "radiacao_kwh_m2" ou "horas_sol"
   matriz_ceu     sky_mtx    (lista, opcional) saídas do LB Cumulative Sky Matrix
+  malha_lb       Mesh       (opcional) saída "mesh" do LB Incident Radiation
+  deslocamento   float      (opcional) _offset_dist_ usado no estudo do LB
+  radiacao       float      (lista, opcional) LB Incident Radiation, céu com solo
+  radiacao_sem_solo float   (lista, opcional) idem, com ground_ref_ = 0
+  horas_sol      float      (lista, opcional) LB Direct Sun Hours
+  vetores_sol    Vector3d   (lista, opcional) "vectors" do LB Sunpath
+  hoys_sol       float      (lista, opcional) "hoys" do LB Sunpath
   exportar       bool       ligue a um Button
 
 SAÍDA:  log
@@ -150,6 +157,27 @@ def _matriz_ladybug(mtx):
     return saida
 
 
+def _sensores_da_malha(malha, k, desloc):
+    """Centro, normal e área de cada face da malha de resultado do Ladybug."""
+    m = _coagir(malha, "geometria")
+    m.FaceNormals.ComputeFaceNormals()
+    pts, nrm, areas = [], [], []
+    for i in range(m.Faces.Count):
+        f = m.Faces[i]
+        c = m.Faces.GetFaceCenter(i)
+        n = rg.Vector3d(m.FaceNormals[i])
+        n.Unitize()
+        a, b, cc = m.Vertices[f.A], m.Vertices[f.B], m.Vertices[f.C]
+        area = rg.Vector3d.CrossProduct(rg.Vector3d(b - a), rg.Vector3d(cc - a)).Length / 2
+        if f.IsQuad:
+            d = m.Vertices[f.D]
+            area += rg.Vector3d.CrossProduct(rg.Vector3d(cc - a), rg.Vector3d(d - a)).Length / 2
+        pts.append([c.X * k, c.Y * k, c.Z * k])
+        nrm.append([n.X, n.Y, n.Z])
+        areas.append(area * k * k)
+    return {"centros": pts, "normais": nrm, "areas": areas, "deslocamento": desloc}
+
+
 def executar():
     msgs = []
     if not exportar:
@@ -203,6 +231,23 @@ def executar():
         except Exception as e:
             msgs.append("matriz_ceu %d: falhou (%s)" % (i, e))
 
+    if malha_lb is not None:
+        desloc = float(deslocamento or 0.0) * k
+        msgs.append(_gravar(os.path.join(destino, "sensores_lb.json"),
+                            _sensores_da_malha(malha_lb, k, desloc)))
+    for nome, valores in [("radiacao", radiacao), ("radiacao_sem_solo", radiacao_sem_solo),
+                          ("horas_sol", horas_sol)]:
+        if valores:
+            dados = {"nome": nome, "valores": [float(v) for v in valores]}
+            msgs.append(_gravar(os.path.join(destino, "resultado_" + nome + ".json"), dados))
+    if vetores_sol:
+        vs = []
+        for v in vetores_sol:
+            v = rg.Vector3d(_coagir(v, "vetor"))
+            vs.append([v.X, v.Y, v.Z])
+        dados = {"vetores": vs, "hoys": [float(h) for h in (hoys_sol or [])]}
+        msgs.append(_gravar(os.path.join(destino, "sol_vetores_lb.json"), dados))
+
     if resultados:
         if pontos and len(resultados) != len(pontos):
             return "ERRO: 'resultados' e 'pontos' têm tamanhos diferentes."
@@ -215,7 +260,8 @@ def executar():
 
 # entradas opcionais que não foram criadas no componente viram None
 for _nome in ["contexto", "pontos", "normais", "epw", "resultados", "nome_resultado", "geometria",
-              "matriz_ceu"]:
+              "matriz_ceu", "malha_lb", "deslocamento", "radiacao", "radiacao_sem_solo",
+              "horas_sol", "vetores_sol", "hoys_sol"]:
     if _nome not in globals():
         globals()[_nome] = None
 

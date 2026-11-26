@@ -45,6 +45,13 @@ ENTRADAS = [
     ("resultados", True, "Resultado do Ladybug por sensor (opcional)"),
     ("nome_resultado", False, "Nome do resultado, ex.: radiacao_kwh_m2"),
     ("matriz_ceu", True, "sky_mtx do LB Cumulative Sky Matrix (opcional)"),
+    ("malha_lb", False, "mesh do LB Incident Radiation"),
+    ("deslocamento", False, "_offset_dist_ do estudo"),
+    ("radiacao", True, "results do LB Incident Radiation (solo 0,2)"),
+    ("radiacao_sem_solo", True, "results do LB Incident Radiation (solo 0)"),
+    ("horas_sol", True, "results do LB Direct Sun Hours"),
+    ("vetores_sol", True, "vectors do LB Sunpath"),
+    ("hoys_sol", True, "hoys do LB Sunpath"),
     ("exportar", False, "Ligue a um botão"),
 ]
 
@@ -170,18 +177,21 @@ def ligar(destino, origem):
 
 def montar_ladybug(gh, doc, p_epw, entrada_matriz):
     """LB Import EPW -> 2x LB Cumulative Sky Matrix (Tregenza e Reinhart) -> matriz_ceu."""
+    lb = {"loc": None, "mtx": []}
     imp = criar_por_nome(gh, doc, "LB Import EPW", 150, 560)
     if imp is None:
-        return
+        return lb
     ligar(achar_param(imp.Params.Input, "_epw_file"), p_epw)
     loc = achar_param(imp.Params.Output, "location")
     dni = achar_param(imp.Params.Output, "direct_normal_rad")
     dhi = achar_param(imp.Params.Output, "diffuse_horizontal_rad")
+    lb["loc"] = loc
 
-    for i, alta in enumerate([False, True]):
+    # Tregenza, Reinhart e Tregenza sem solo (este último só para o estudo da 1b)
+    for i, (alta, sem_solo) in enumerate([(False, False), (True, False), (False, True)]):
         mtx = criar_por_nome(gh, doc, "LB Cumulative Sky Matrix", 420, 560 + 160 * i)
         if mtx is None:
-            return
+            return lb
         ligar(achar_param(mtx.Params.Input, "_location"), loc)
         ligar(achar_param(mtx.Params.Input, "_direct_rad"), dni)
         ligar(achar_param(mtx.Params.Input, "_diffuse_rad"), dhi)
@@ -190,7 +200,88 @@ def montar_ladybug(gh, doc, p_epw, entrada_matriz):
             t.Value = True
             t.NickName = "Reinhart"
             ligar(achar_param(mtx.Params.Input, "high_density_"), t)
-        ligar(entrada_matriz, achar_param(mtx.Params.Output, "sky_mtx"))
+        saida = achar_param(mtx.Params.Output, "sky_mtx")
+        if sem_solo:
+            p0 = painel(gh, doc, "0", "ground_ref", 250, 880, 60)
+            ligar(achar_param(mtx.Params.Input, "ground_ref_"), p0)
+        else:
+            ligar(entrada_matriz, saida)
+        lb["mtx"].append(saida)
+    return lb
+
+
+def montar_estudo(gh, doc, lb, entrada):
+    """Cena de teste da 1b: prédio + piso (analisados) e torre ao norte (contexto)."""
+    import Rhino.Geometry as rg
+
+    if lb["loc"] is None or len(lb["mtx"]) < 3:
+        print("Aviso: estudo da 1b não montado (faltam componentes do Ladybug).")
+        return
+    # dimensões em metros convertidas para a unidade do modelo
+    k = Rhino.RhinoMath.UnitScale(Rhino.UnitSystem.Meters, Rhino.RhinoDoc.ActiveDoc.ModelUnitSystem)
+
+    def bloco(x0, y0, z0, x1, y1, z1):
+        bb = rg.BoundingBox(rg.Point3d(x0 * k, y0 * k, z0 * k), rg.Point3d(x1 * k, y1 * k, z1 * k))
+        return rg.Box(bb).ToBrep()
+
+    piso = rg.PlaneSurface(rg.Plane.WorldXY, rg.Interval(-30 * k, 30 * k),
+                           rg.Interval(-30 * k, 30 * k)).ToBrep()
+
+    def param_brep(breps, apelido, x, y):
+        p = gh.Kernel.Parameters.Param_Brep()
+        p.NickName = apelido
+        for b in breps:
+            p.PersistentData.Append(gh.Kernel.Types.GH_Brep(b))
+        return colocar(doc, p, x, y)
+
+    x0, y0 = 150, 1100
+    geo = param_brep([bloco(-5, -5, 0, 5, 5, 20), piso], "geometria", x0, y0)
+    ctx = param_brep([bloco(-15, 15, 0, 15, 25, 30)], "contexto", x0, y0 + 50)
+    grade = painel(gh, doc, "2", "grid_size (m)", x0, y0 + 100, 60)
+    desloc = painel(gh, doc, "0.1", "offset (m)", x0, y0 + 140, 60)
+    rodar = colocar(doc, gh.Kernel.Special.GH_BooleanToggle(), x0, y0 + 180)
+    rodar.NickName = "rodar LB"
+    rodar.Value = True
+
+    ligar(entrada["geometria"], geo)
+    ligar(entrada["contexto"], ctx)
+    ligar(entrada["deslocamento"], desloc)
+
+    def estudo(nome, x, y, extra):
+        c = criar_por_nome(gh, doc, nome, x, y)
+        if c is None:
+            return None
+        ligar(achar_param(c.Params.Input, "_geometry"), geo)
+        ligar(achar_param(c.Params.Input, "context_"), ctx)
+        ligar(achar_param(c.Params.Input, "_grid_size"), grade)
+        ligar(achar_param(c.Params.Input, "_offset_dist_"), desloc)
+        ligar(achar_param(c.Params.Input, "_run"), rodar)
+        for nome_in, origem in extra:
+            ligar(achar_param(c.Params.Input, nome_in), origem)
+        return c
+
+    rad = estudo("LB Incident Radiation", 480, y0, [("_sky_mtx", lb["mtx"][0])])
+    rad0 = estudo("LB Incident Radiation", 480, y0 + 220, [("_sky_mtx", lb["mtx"][2])])
+    if rad is not None:
+        ligar(entrada["malha_lb"], achar_param(rad.Params.Output, "mesh"))
+        ligar(entrada["radiacao"], achar_param(rad.Params.Output, "results"))
+    if rad0 is not None:
+        ligar(entrada["radiacao_sem_solo"], achar_param(rad0.Params.Output, "results"))
+
+    # sol: ano inteiro, de hora em hora
+    periodo = criar_por_nome(gh, doc, "LB Analysis Period", x0, y0 + 260)
+    sp = criar_por_nome(gh, doc, "LB SunPath", 330, y0 + 260)
+    if sp is None:
+        sp = criar_por_nome(gh, doc, "LB Sunpath", 330, y0 + 260)
+    if periodo is not None and sp is not None:
+        ligar(achar_param(sp.Params.Input, "_location"), lb["loc"])
+        ligar(achar_param(sp.Params.Input, "hoys_"), achar_param(periodo.Params.Output, "hoys"))
+        vets = achar_param(sp.Params.Output, "vectors")
+        ligar(entrada["vetores_sol"], vets)
+        ligar(entrada["hoys_sol"], achar_param(sp.Params.Output, "hoys"))
+        hs = estudo("LB Direct Sun Hours", 480, y0 + 440, [("_vectors", vets)])
+        if hs is not None:
+            ligar(entrada["horas_sol"], achar_param(hs.Params.Output, "results"))
 
 
 def montar():
@@ -214,7 +305,8 @@ def montar():
     entrada["nome_resultado"].AddSource(p_nome)
     entrada["exportar"].AddSource(botao)
 
-    montar_ladybug(gh, doc, p_epw, entrada["matriz_ceu"])
+    lb = montar_ladybug(gh, doc, p_epw, entrada["matriz_ceu"])
+    montar_estudo(gh, doc, lb, entrada)
 
     log = painel(gh, doc, "", "log", 850, 200, 360)
     log.Attributes.Bounds = sd.RectangleF(850, 200, 360, 160)

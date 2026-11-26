@@ -115,6 +115,13 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   vértices e faz refit da BVH (mesma topologia, mais rápido que reconstruir).
   Benchmark: ~1,6 bilhão de raios/s (64 variantes, 645 mil sensores × 577
   patches em 0,23 s).
+- Motor A (`modulos/sol_luz/motor_a.py`): mesmo método do Ladybug — céu como
+  direções dos centros dos patches com energia acumulada (sol direto já nos
+  patches); radiação = Σ visível · cos⁺ · E_p. Solo = patches espelhados com
+  L = ρ·G_horiz/π (sem reflexões entre edifícios; isso é o motor B).
+  FV simples: radiação × área × eficiência × (1 − perdas).
+  PENDENTE: comparar com LB Incident Radiation / Direct Sun Hours (cena de
+  teste montada pelo .gh; testes em `testes/test_ladybug_1b.py`).
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).
