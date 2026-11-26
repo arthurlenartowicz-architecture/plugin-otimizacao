@@ -39,7 +39,21 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 
 ## Etapas
 - [x] 0. Ambiente: CUDA, PyTorch, Warp, teste de GPU, estrutura, git
-- [ ] 1. Sol e luz + conforto externo (validar contra o Ladybug)
+- [ ] 1. Sol e luz
+  - [ ] 1a · Fundação: leitor de EPW, posição solar, subdivisão do céu
+    (Tregenza/Reinhart), matriz de céu anual (modelo de Perez, equivalente ao
+    `gendaymtx` do Radiance), malhas de sensores, estrutura de aceleração (BVH)
+    e raycasting no Warp, importação da geometria do Rhino.
+  - [ ] 1b · Motor A: radiação incidente, horas de sol, sombra no entorno e
+    fotovoltaico. Validação contra o Ladybug (Incident Radiation, Sunlight Hours).
+  - [ ] 1c · Motor B: matriz de coeficientes com reflexões, depois fator de luz
+    diurna, DA, sDA, UDI e ASE. Validação contra o Honeybee-Radiance.
+  - [ ] 1d · EML: fatores melanópicos sobre o motor B.
+  - [ ] 1e · Motor C: render olho-de-peixe e fórmula do DGP (Wienold).
+    Validação contra o evalglare.
+  - [ ] 1f · Integração: tudo no contrato de módulo (`sol_luz`), com os níveis
+    rápido, padrão e validação, e um benchmark de quantas variantes por segundo
+    a 5070 aguenta.
 - [ ] 2. Estrutura: FEM de barras em lote (validar contra o Karamba)
 - [ ] 3. Otimizador + Pareto no Rhino → MVP do TCC
 - [ ] 4. Plugin C# completo + térmico, carbono/custo, programa
