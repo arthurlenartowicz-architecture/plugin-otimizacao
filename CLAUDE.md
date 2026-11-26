@@ -98,7 +98,12 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   difusa horizontal = DHI somando os patches (não por integral contínua) e
   reparte a DNI nos 4 patches mais próximos do sol (peso 1/(1,002 − cos γ)).
   Horas com sol abaixo do horizonte = zero. Sem patch de chão.
-  PENDENTE: comparar com o LB Cumulative Sky Matrix.
+  Comparado com o LB Cumulative Sky Matrix (Curitiba, Tregenza e Reinhart):
+  direta total ±0,02%; difusa total +0,7%, por patch 0,99–1,06 (rms 1,8%),
+  um pouco mais clara perto do horizonte. O Ladybug também normaliza pela soma
+  dos patches (integral fina piorou) e usa o sol no meio da hora (na hora
+  cheia o rms sobe para 6,5%). Diferença residual aceita; rever se a 1b
+  (radiação em fachadas) passar de ±5% contra o Ladybug.
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).
