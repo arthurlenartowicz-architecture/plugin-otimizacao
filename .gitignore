@@ -7,7 +7,8 @@ __pycache__/
 .ipynb_checkpoints/
 
 # Dados grandes / gerados
-data/epw/*.epw
+data/epw/*
+!data/epw/.gitkeep
 data/cache/
 *.npz
 *.h5
