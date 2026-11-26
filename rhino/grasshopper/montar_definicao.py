@@ -59,6 +59,9 @@ ENTRADAS = [
     ("hb_udi_alto", True, "UDI_up do HB Annual Daylight"),
     ("hb_df", True, "results do HB Daylight Factor"),
     ("hb_resultados", False, "pasta results do HB Annual Daylight"),
+    ("modelo_hb_ofusc", False, "HB Model com a grade de vistas (1e)"),
+    ("hb_ga", True, "GA do HB Imageless Annual Glare"),
+    ("hb_ofusc_resultados", False, "pasta results do HB Imageless Annual Glare"),
     ("exportar", False, "Ligue a um botão"),
 ]
 
@@ -369,6 +372,57 @@ def montar_honeybee(gh, doc, p_epw, entrada):
     ligar(entrada["hb_udi_alto"], sai(anual, "UDI_up"))
     ligar(entrada["hb_resultados"], sai(anual, "results"))
     ligar(entrada["hb_df"], sai(df, "results"))
+    return {"salas": salas, "wea": sai(wea, "wea"), "rodar": rodar, "sai": sai, "entra": entra}
+
+
+def montar_ofuscamento(gh, doc, hb, entrada):
+    """1e: mesma sala, grade de 8 vistas (2 posições × N/L/S/O a 1,2 m) e
+    HB Imageless Annual Glare (DGP hora a hora + GA)."""
+    import Rhino.Geometry as rg
+
+    if hb is None or hb["salas"] is None:
+        print("Aviso: estudo de ofuscamento não montado (falta a sala do HB).")
+        return
+    sai, entra = hb["sai"], hb["entra"]
+    k = Rhino.RhinoMath.UnitScale(Rhino.UnitSystem.Meters, Rhino.RhinoDoc.ActiveDoc.ModelUnitSystem)
+    x0, y0 = 150, 2500
+    pts = gh.Kernel.Parameters.Param_Point()
+    pts.NickName = "olhos"
+    vets = gh.Kernel.Parameters.Param_Vector()
+    vets.NickName = "direções"
+    for (x, y) in [(103.0, 4.0), (103.0, 1.5)]:
+        for d in [(0, 1, 0), (1, 0, 0), (0, -1, 0), (-1, 0, 0)]:
+            pts.PersistentData.Append(gh.Kernel.Types.GH_Point(rg.Point3d(x * k, y * k, 1.2 * k)))
+            vets.PersistentData.Append(gh.Kernel.Types.GH_Vector(rg.Vector3d(*d)))
+    colocar(doc, pts, x0, y0)
+    colocar(doc, vets, x0, y0 + 50)
+
+    grade = criar_por_nome(gh, doc, "HB Sensor Grid", x0 + 200, y0)
+    modelo = criar_por_nome(gh, doc, "HB Model", x0 + 200, y0 + 160)
+    atribuir = criar_por_nome(gh, doc, "HB Assign Grids and Views", x0 + 400, y0 + 60)
+    glare = criar_por_nome(gh, doc, "HB Imageless Annual Glare", x0 + 650, y0)
+    if None in (grade, modelo, atribuir, glare):
+        print("Aviso: estudo de ofuscamento incompleto; ligue o que faltar à mão.")
+    nome = painel(gh, doc, "vistas", "nome da grade", x0 + 200, y0 - 40, 80)
+    p_par = painel(gh, doc, "-ab 5 -ad 20000 -lw 2e-05", "radiance_par ofusc.", x0 + 400, y0 + 160, 220)
+    p_lum = painel(gh, doc, "2000", "luminance_factor", x0 + 400, y0 + 200, 60)
+
+    entra(grade, "_name_", nome)
+    entra(grade, "_positions", pts)
+    entra(grade, "_directions_", vets)
+    entra(modelo, "rooms_", hb["salas"])
+    entra(atribuir, "_model", sai(modelo, "model"))
+    entra(atribuir, "grids_", sai(grade, "grid", "grids"))
+    m = sai(atribuir, "model")
+    entra(glare, "_model", m)
+    entra(glare, "_wea", hb["wea"])
+    entra(glare, "_luminance_factor_", p_lum)
+    entra(glare, "radiance_par_", p_par)
+    entra(glare, "_run", hb["rodar"])
+
+    ligar(entrada["modelo_hb_ofusc"], m)
+    ligar(entrada["hb_ga"], sai(glare, "GA"))
+    ligar(entrada["hb_ofusc_resultados"], sai(glare, "results"))
 
 
 def montar():
@@ -394,7 +448,8 @@ def montar():
 
     lb = montar_ladybug(gh, doc, p_epw, entrada["matriz_ceu"])
     montar_estudo(gh, doc, lb, entrada)
-    montar_honeybee(gh, doc, p_epw, entrada)
+    hb = montar_honeybee(gh, doc, p_epw, entrada)
+    montar_ofuscamento(gh, doc, hb, entrada)
 
     log = painel(gh, doc, "", "log", 850, 200, 360)
     log.Attributes.Bounds = sd.RectangleF(850, 200, 360, 160)

@@ -27,8 +27,8 @@ N_RAIOS = 16384
 REFLEXOES = 5  # igual ao -ab 5 usado no Honeybee
 
 
-def carregar_sala(caso):
-    d = carregar(caso, "sala_hb.json")
+def carregar_sala(caso, arquivo="sala_hb.json"):
+    d = carregar(caso, arquivo)
     vs, fs, rho, tau, base = [], [], [], [], 0
     for s in d["superficies"]:
         v = torch.tensor(s["vertices"], dtype=torch.float64)

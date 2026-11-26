@@ -25,6 +25,9 @@ Python 3, ou o GhPython antigo; funciona nos dois). Crie estas ENTRADAS
   modelo_hb      HB Model   (opcional) sala de teste da 1c (geometria, materiais, sensores)
   hb_da, hb_udi, hb_udi_baixo, hb_udi_alto, hb_df  float (listas, opcionais) resultados HB
   hb_resultados  str        (opcional) pasta de resultados do HB Annual Daylight
+  modelo_hb_ofusc HB Model  (opcional) sala com a grade de vistas (1e)
+  hb_ga          float      (lista, opcional) GA do HB Imageless Annual Glare
+  hb_ofusc_resultados str   (opcional) pasta de resultados do HB Imageless Annual Glare
   exportar       bool       ligue a um Button
 
 SAÍDA:  log
@@ -214,6 +217,19 @@ def _modelo_hb(modelo):
     return {"superficies": superficies, "sensores": sensores}
 
 
+def _arquivos_de_resultado(pasta, extensoes=(".dgp", ".ga", ".txt", ".json"), max_bytes=5000000):
+    """Conteúdo dos arquivos de texto pequenos de uma pasta de resultados do HB."""
+    saida = {}
+    for raiz, _, nomes in os.walk(str(pasta)):
+        for n in nomes:
+            if os.path.splitext(n)[1].lower() in extensoes:
+                c = os.path.join(raiz, n)
+                if os.path.getsize(c) <= max_bytes:
+                    with open(c) as f:
+                        saida[os.path.relpath(c, str(pasta)).replace("\\", "/")] = f.read()
+    return saida
+
+
 def _achatar(x):
     """Lista simples de floats (aceita listas de listas vindas de árvores do GH)."""
     saida = []
@@ -309,6 +325,23 @@ def executar():
     if hb_resultados:
         msgs.append(_gravar(os.path.join(destino, "hb_resultados.json"),
                             {"pasta": str(hb_resultados)}))
+    if modelo_hb_ofusc is not None:
+        try:
+            msgs.append(_gravar(os.path.join(destino, "sala_hb_ofusc.json"),
+                                _modelo_hb(modelo_hb_ofusc)))
+        except Exception as e:
+            msgs.append("modelo_hb_ofusc: falhou (" + str(e) + ")")
+    vals = _achatar(hb_ga)
+    if vals:
+        msgs.append(_gravar(os.path.join(destino, "resultado_hb_ga.json"),
+                            {"nome": "hb_ga", "valores": vals}))
+    if hb_ofusc_resultados:
+        try:
+            arqs = _arquivos_de_resultado(hb_ofusc_resultados)
+            msgs.append(_gravar(os.path.join(destino, "hb_ofusc_arquivos.json"),
+                                {"pasta": str(hb_ofusc_resultados), "arquivos": arqs}))
+        except Exception as e:
+            msgs.append("hb_ofusc_resultados: falhou (" + str(e) + ")")
 
     if resultados:
         if pontos and len(resultados) != len(pontos):
@@ -324,7 +357,8 @@ def executar():
 for _nome in ["contexto", "pontos", "normais", "epw", "resultados", "nome_resultado", "geometria",
               "matriz_ceu", "malha_lb", "deslocamento", "radiacao", "radiacao_sem_solo",
               "horas_sol", "vetores_sol", "hoys_sol", "modelo_hb", "hb_da", "hb_udi",
-              "hb_udi_baixo", "hb_udi_alto", "hb_df", "hb_resultados"]:
+              "hb_udi_baixo", "hb_udi_alto", "hb_df", "hb_resultados", "modelo_hb_ofusc",
+              "hb_ga", "hb_ofusc_resultados"]:
     if _nome not in globals():
         globals()[_nome] = None
 
