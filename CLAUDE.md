@@ -46,7 +46,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
     e raycasting no Warp, importação da geometria do Rhino.
   - [x] 1b · Motor A: radiação incidente, horas de sol, sombra no entorno e
     fotovoltaico. Validação contra o Ladybug (Incident Radiation, Sunlight Hours).
-  - [ ] 1c · Motor B: matriz de coeficientes com reflexões, depois fator de luz
+  - [x] 1c · Motor B: matriz de coeficientes com reflexões, depois fator de luz
     diurna, DA, sDA, UDI e ASE. Validação contra o Honeybee-Radiance.
   - [ ] 1d · EML: fatores melanópicos sobre o motor B.
   - [ ] 1e · Motor C: render olho-de-peixe e fórmula do DGP (Wienold).
@@ -143,7 +143,14 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   Última coluna = solo, L = ρ·E_horiz/π. Horas ocupadas 8–18 h (3650 h).
   Métricas: DA300, UDI 100–3000, sDA (DA ≥ 50%), ASE (sol direto > 1000 lux
   por > 250 h), DF com céu CIE encoberto. Sala 722 sensores × 8192 raios ×
-  5 reflexões: 8 ms. PENDENTE: validar contra o Honeybee-Radiance.
+  5 reflexões: 8 ms.
+- Validação 1c contra Honeybee-Radiance (sala 6x8x3 m, janelas 40%, materiais
+  padrão do HB: parede 0,5, piso 0,2, teto 0,8, vidro τ 0,64; -ab 5; Curitiba):
+  DF médio −2,7% (por sensor 2,7% médio, 9% máx); DA300 0,08 ponto; UDI
+  0,9 ponto (máx ~9 perto do limite de 3000 lux). Geometria, materiais e
+  sensores vêm do próprio HB Model exportado (`sala_hb.json`). No GH a grade
+  entra pelo HB Assign Grids and Views. ASE não comparado direto com o HB
+  (usa o mesmo sol direto já validado nas horas de sol).
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).

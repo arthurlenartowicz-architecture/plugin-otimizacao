@@ -2,7 +2,9 @@
 
 Usa a geometria, os materiais e os sensores do próprio modelo HB exportado.
 Pulados até existir testes/referencias/<caso>/sala_hb.json.
-Tolerâncias provisórias: ajustar depois da primeira comparação.
+Medido em Curitiba (sala 6x8x3 m, janelas 40%, materiais padrão do HB, -ab 5):
+DF médio −2,7% (erro por sensor médio 2,7%, máx 9%); DA dif. média 0,08 ponto;
+UDI 0,9 ponto (máx ~9 em sensores que passam muitas horas perto de 3000 lux).
 """
 import pytest
 import torch
@@ -72,8 +74,9 @@ def test_fator_de_luz_diurna(caso):
     print(f"\nDF: {len(ref)} sensores, médio nós {nos.mean():.3f}% HB {ref.mean():.3f}% "
           f"(razão {nos.mean() / ref.mean():.3f}); erro rel. médio {rel.abs().mean():.3f}, "
           f"máx {rel.abs().max():.3f}")
-    assert abs(nos.mean() / ref.mean() - 1) < 0.10
-    assert rel.abs().mean() < 0.15
+    assert abs(nos.mean() / ref.mean() - 1) < 0.05
+    assert rel.abs().mean() < 0.05
+    assert rel.abs().max() < 0.15
 
 
 @pytest.mark.parametrize("caso", CASOS, ids=lambda p: p.name)
@@ -99,4 +102,5 @@ def test_metricas_anuais(caso):
         dif = (nos[nome] - ref).abs()
         print(f"\n{nome}: médio nós {nos[nome].mean():.1f}% HB {ref.mean():.1f}%, "
               f"dif. média {dif.mean():.2f} pontos, máx {dif.max():.1f}")
-        assert dif.mean() < 5.0
+        assert dif.mean() < 2.0
+        assert dif.max() < 15.0
