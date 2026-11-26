@@ -52,6 +52,13 @@ ENTRADAS = [
     ("horas_sol", True, "results do LB Direct Sun Hours"),
     ("vetores_sol", True, "vectors do LB Sunpath"),
     ("hoys_sol", True, "hoys do LB Sunpath"),
+    ("modelo_hb", False, "HB Model da sala de teste (1c)"),
+    ("hb_da", True, "DA do HB Annual Daylight"),
+    ("hb_udi", True, "UDI do HB Annual Daylight"),
+    ("hb_udi_baixo", True, "UDI_low do HB Annual Daylight"),
+    ("hb_udi_alto", True, "UDI_up do HB Annual Daylight"),
+    ("hb_df", True, "results do HB Daylight Factor"),
+    ("hb_resultados", False, "pasta results do HB Annual Daylight"),
     ("exportar", False, "Ligue a um botão"),
 ]
 
@@ -284,6 +291,75 @@ def montar_estudo(gh, doc, lb, entrada):
             ligar(entrada["horas_sol"], achar_param(hs.Params.Output, "results"))
 
 
+def montar_honeybee(gh, doc, p_epw, entrada):
+    """Sala de teste da 1c: 6 x 8 x 3 m, janelas 40% em todas as paredes,
+    materiais padrão do Honeybee, sensores 0,5 m a 0,8 m do piso."""
+    import Rhino.Geometry as rg
+
+    k = Rhino.RhinoMath.UnitScale(Rhino.UnitSystem.Meters, Rhino.RhinoDoc.ActiveDoc.ModelUnitSystem)
+    x0, y0 = 150, 1900
+    bb = rg.BoundingBox(rg.Point3d(100 * k, 0, 0), rg.Point3d(106 * k, 8 * k, 3 * k))
+    sala = gh.Kernel.Parameters.Param_Brep()
+    sala.NickName = "sala HB"
+    sala.PersistentData.Append(gh.Kernel.Types.GH_Brep(rg.Box(bb).ToBrep()))
+    colocar(doc, sala, x0, y0)
+
+    room = criar_por_nome(gh, doc, "HB Room from Solid", x0 + 150, y0)
+    janelas = criar_por_nome(gh, doc, "HB Apertures by Ratio", x0 + 330, y0)
+    grade = criar_por_nome(gh, doc, "HB Sensor Grid from Rooms", x0 + 510, y0 + 120)
+    modelo = criar_por_nome(gh, doc, "HB Model", x0 + 700, y0)
+    wea = criar_por_nome(gh, doc, "HB Wea From EPW", x0 + 510, y0 + 260)
+    anual = criar_por_nome(gh, doc, "HB Annual Daylight", x0 + 900, y0)
+    df = criar_por_nome(gh, doc, "HB Daylight Factor", x0 + 900, y0 + 260)
+    if None in (room, janelas, grade, modelo, wea, anual, df):
+        print("Aviso: estudo do Honeybee incompleto; ligue o que faltar à mão.")
+
+    p_ratio = painel(gh, doc, "0.4", "razão janela", x0 + 150, y0 + 80, 60)
+    p_grade = painel(gh, doc, "0.5", "grade (m)", x0 + 330, y0 + 160, 60)
+    p_altura = painel(gh, doc, "0.8", "altura (m)", x0 + 330, y0 + 200, 60)
+    p_par_anual = painel(gh, doc, "-ab 5 -ad 20000 -lw 2e-05", "radiance_par anual",
+                         x0 + 700, y0 + 120, 220)
+    p_par_df = painel(gh, doc, "-ab 5 -ad 10000 -as 2048 -ar 256 -aa 0.05 -lw 2e-05",
+                      "radiance_par DF", x0 + 700, y0 + 320, 300)
+    rodar = colocar(doc, gh.Kernel.Special.GH_BooleanToggle(), x0 + 700, y0 + 200)
+    rodar.NickName = "rodar HB"
+    rodar.Value = True
+
+    def entra(comp, nome, origem):
+        if comp is not None:
+            ligar(achar_param(comp.Params.Input, nome), origem)
+
+    def sai(comp, nome):
+        return achar_param(comp.Params.Output, nome) if comp is not None else None
+
+    entra(room, "_solid", sala)
+    entra(janelas, "_hb_objs", sai(room, "room"))
+    entra(janelas, "_ratio", p_ratio)
+    salas = sai(janelas, "hb_objs")
+    entra(grade, "_rooms", salas)
+    entra(grade, "_grid_size", p_grade)
+    entra(grade, "_dist_floor_", p_altura)
+    entra(modelo, "rooms_", salas)
+    entra(modelo, "grids_", sai(grade, "grid"))
+    m = sai(modelo, "model")
+    entra(wea, "_epw_file", p_epw)
+    entra(anual, "_model", m)
+    entra(anual, "_wea", sai(wea, "wea"))
+    entra(anual, "radiance_par_", p_par_anual)
+    entra(anual, "_run", rodar)
+    entra(df, "_model", m)
+    entra(df, "radiance_par_", p_par_df)
+    entra(df, "_run", rodar)
+
+    ligar(entrada["modelo_hb"], m)
+    ligar(entrada["hb_da"], sai(anual, "DA"))
+    ligar(entrada["hb_udi"], sai(anual, "UDI"))
+    ligar(entrada["hb_udi_baixo"], sai(anual, "UDI_low"))
+    ligar(entrada["hb_udi_alto"], sai(anual, "UDI_up"))
+    ligar(entrada["hb_resultados"], sai(anual, "results"))
+    ligar(entrada["hb_df"], sai(df, "results"))
+
+
 def montar():
     gh = abrir_grasshopper()
     doc = novo_documento(gh)
@@ -307,6 +383,7 @@ def montar():
 
     lb = montar_ladybug(gh, doc, p_epw, entrada["matriz_ceu"])
     montar_estudo(gh, doc, lb, entrada)
+    montar_honeybee(gh, doc, p_epw, entrada)
 
     log = painel(gh, doc, "", "log", 850, 200, 360)
     log.Attributes.Bounds = sd.RectangleF(850, 200, 360, 160)

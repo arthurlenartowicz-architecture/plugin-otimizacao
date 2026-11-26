@@ -22,6 +22,9 @@ Python 3, ou o GhPython antigo; funciona nos dois). Crie estas ENTRADAS
   horas_sol      float      (lista, opcional) LB Direct Sun Hours
   vetores_sol    Vector3d   (lista, opcional) "vectors" do LB Sunpath
   hoys_sol       float      (lista, opcional) "hoys" do LB Sunpath
+  modelo_hb      HB Model   (opcional) sala de teste da 1c (geometria, materiais, sensores)
+  hb_da, hb_udi, hb_udi_baixo, hb_udi_alto, hb_df  float (listas, opcionais) resultados HB
+  hb_resultados  str        (opcional) pasta de resultados do HB Annual Daylight
   exportar       bool       ligue a um Button
 
 SAÍDA:  log
@@ -178,6 +181,50 @@ def _sensores_da_malha(malha, k, desloc):
     return {"centros": pts, "normais": nrm, "areas": areas, "deslocamento": desloc}
 
 
+def _modelo_hb(modelo):
+    """Superfícies (malha triangulada + refletância/transmitância) e sensores de um HB Model."""
+    m = modelo.duplicate()
+    m.convert_to_units("Meters")
+    superficies = []
+
+    def add(geo, mod, tipo, nome):
+        malha = geo.triangulated_mesh3d
+        d = {
+            "nome": nome, "tipo": tipo,
+            "vertices": [[p.x, p.y, p.z] for p in malha.vertices],
+            "faces": [list(f) for f in malha.faces],
+            "modificador": mod.identifier, "classe": type(mod).__name__,
+            "refletancia": getattr(mod, "average_reflectance", None),
+            "transmitancia": getattr(mod, "average_transmittance", None),
+            "radiance": mod.to_radiance(),
+        }
+        superficies.append(d)
+
+    for room in m.rooms:
+        for face in room.faces:
+            add(face.punched_geometry, face.properties.radiance.modifier, "face", face.identifier)
+            for ap in face.apertures:
+                add(ap.geometry, ap.properties.radiance.modifier, "abertura", ap.identifier)
+            for dr in face.doors:
+                add(dr.geometry, dr.properties.radiance.modifier, "porta", dr.identifier)
+    sensores = []
+    for g in m.properties.radiance.sensor_grids:
+        for s in g.sensors:
+            sensores.append({"grade": g.identifier, "pos": list(s.pos), "dir": list(s.dir)})
+    return {"superficies": superficies, "sensores": sensores}
+
+
+def _achatar(x):
+    """Lista simples de floats (aceita listas de listas vindas de árvores do GH)."""
+    saida = []
+    for v in x or []:
+        if isinstance(v, (list, tuple)):
+            saida.extend(_achatar(v))
+        elif v is not None:
+            saida.append(float(v))
+    return saida
+
+
 def executar():
     msgs = []
     if not exportar:
@@ -248,6 +295,21 @@ def executar():
         dados = {"vetores": vs, "hoys": [float(h) for h in (hoys_sol or [])]}
         msgs.append(_gravar(os.path.join(destino, "sol_vetores_lb.json"), dados))
 
+    if modelo_hb is not None:
+        try:
+            msgs.append(_gravar(os.path.join(destino, "sala_hb.json"), _modelo_hb(modelo_hb)))
+        except Exception as e:
+            msgs.append("modelo_hb: falhou (" + str(e) + ")")
+    for nome, valores in [("hb_da", hb_da), ("hb_udi", hb_udi), ("hb_udi_baixo", hb_udi_baixo),
+                          ("hb_udi_alto", hb_udi_alto), ("hb_df", hb_df)]:
+        vals = _achatar(valores)
+        if vals:
+            msgs.append(_gravar(os.path.join(destino, "resultado_" + nome + ".json"),
+                                {"nome": nome, "valores": vals}))
+    if hb_resultados:
+        msgs.append(_gravar(os.path.join(destino, "hb_resultados.json"),
+                            {"pasta": str(hb_resultados)}))
+
     if resultados:
         if pontos and len(resultados) != len(pontos):
             return "ERRO: 'resultados' e 'pontos' têm tamanhos diferentes."
@@ -261,7 +323,8 @@ def executar():
 # entradas opcionais que não foram criadas no componente viram None
 for _nome in ["contexto", "pontos", "normais", "epw", "resultados", "nome_resultado", "geometria",
               "matriz_ceu", "malha_lb", "deslocamento", "radiacao", "radiacao_sem_solo",
-              "horas_sol", "vetores_sol", "hoys_sol"]:
+              "horas_sol", "vetores_sol", "hoys_sol", "modelo_hb", "hb_da", "hb_udi",
+              "hb_udi_baixo", "hb_udi_alto", "hb_df", "hb_resultados"]:
     if _nome not in globals():
         globals()[_nome] = None
 
