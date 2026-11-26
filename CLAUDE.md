@@ -49,7 +49,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   - [x] 1c · Motor B: matriz de coeficientes com reflexões, depois fator de luz
     diurna, DA, sDA, UDI e ASE. Validação contra o Honeybee-Radiance.
   - [x] 1d · EML: fatores melanópicos sobre o motor B.
-  - [ ] 1e · Motor C: render olho-de-peixe e fórmula do DGP (Wienold).
+  - [x] 1e · Motor C: render olho-de-peixe e fórmula do DGP (Wienold).
     Validação contra o evalglare.
   - [ ] 1f · Integração: tudo no contrato de módulo (`sol_luz`), com os níveis
     rápido, padrão e validação, e um benchmark de quantas variantes por segundo
@@ -165,8 +165,13 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   = pixels > 2000 cd/m² (como dcglare/HB imageless; < 100 = fator × média);
   P de Guth acima e Iwata abaixo da linha de visão (máx 16); correção de baixa
   luz (Ev < 1000) opcional. GA = % horas ocupadas com DGP < 0,4. 8 vistas ×
-  12,9 mil pixels × 64 amostras: 12 ms. PENDENTE: comparar com o HB Imageless
-  Annual Glare (2º modelo HB no .gh, grade de 8 vistas).
+  12,9 mil pixels × 64 amostras: 12 ms.
+- Validação 1e contra HB Imageless Annual Glare (dcglare; mesma sala da 1c,
+  8 vistas a 1,2 m, -ab 5): GA dif. média 1,5 ponto (máx 3,6); DGP hora a
+  hora |dif| média 0,011, p95 0,05, correlação 0,979, 91% na mesma classe.
+  O dcglare aplica a correção de baixa luz (padrão ligado). Erros grandes
+  isolados = sol rente à borda da janela (vê/não vê o disco). O HB grava
+  `<grade>.dgp` (vistas × horas com sol) e `sun-up-hours.txt` (meio da hora).
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).
