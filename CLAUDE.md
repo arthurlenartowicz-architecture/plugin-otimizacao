@@ -93,6 +93,12 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   patches na mesma ordem; os vetores do Ladybug também apontam para cima.
 - Sol validado contra o Ladybug (Curitiba, 8760 h): erro máx. 0,0014° na
   altitude e 0,0024° no azimute.
+- Matriz de céu (`nucleo/matriz_ceu.py`): Perez 1993, equivalente ao
+  `gendaymtx -O1` (só radiação; visível fica para a 1c). Normaliza para que a
+  difusa horizontal = DHI somando os patches (não por integral contínua) e
+  reparte a DNI nos 4 patches mais próximos do sol (peso 1/(1,002 − cos γ)).
+  Horas com sol abaixo do horizonte = zero. Sem patch de chão.
+  PENDENTE: comparar com o LB Cumulative Sky Matrix.
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).

@@ -14,6 +14,7 @@ Python 3, ou o GhPython antigo; funciona nos dois). Crie estas ENTRADAS
   epw            str        (opcional) caminho do .epw usado no estudo
   resultados     float      (lista, opcional) resultado do Ladybug por sensor
   nome_resultado str        (opcional) ex.: "radiacao_kwh_m2" ou "horas_sol"
+  matriz_ceu     sky_mtx    (lista, opcional) saídas do LB Cumulative Sky Matrix
   exportar       bool       ligue a um Button
 
 SAÍDA:  log
@@ -116,6 +117,39 @@ def _ceu_ladybug():
     }
 
 
+def _jsonavel(x, prof=0):
+    """Converte o que der (listas, tuplas, números, dicts) para JSON."""
+    if prof > 6:
+        return str(x)
+    if x is None or isinstance(x, (bool, int, float, str)):
+        return x
+    if isinstance(x, dict):
+        return dict((str(k), _jsonavel(v, prof + 1)) for k, v in x.items())
+    try:
+        return [_jsonavel(v, prof + 1) for v in x]
+    except TypeError:
+        try:
+            return float(x)
+        except Exception:
+            return str(x)
+
+
+def _matriz_ladybug(mtx):
+    """Grava o conteúdo de um sky_mtx do LB Cumulative Sky Matrix."""
+    attrs = [a for a in dir(mtx) if not a.startswith("_")]
+    saida = {"tipo": type(mtx).__name__, "atributos": attrs}
+    for nome in ["high_density", "north", "ground_reflectance", "data",
+                 "direct_values", "diffuse_values", "total_values"]:
+        if nome in attrs:
+            try:
+                v = getattr(mtx, nome)
+                if not callable(v):
+                    saida[nome] = _jsonavel(v)
+            except Exception as e:
+                saida[nome] = "erro: " + str(e)
+    return saida
+
+
 def executar():
     msgs = []
     if not exportar:
@@ -159,6 +193,16 @@ def executar():
     except Exception as e:
         msgs.append("ceu_ladybug: falhou (" + str(e) + ")")
 
+    for i, mtx in enumerate(matriz_ceu or []):
+        if mtx is None:
+            continue
+        try:
+            d = _matriz_ladybug(mtx)
+            nome = "matriz_ceu_ladybug_%d.json" % i
+            msgs.append(_gravar(os.path.join(destino, nome), d))
+        except Exception as e:
+            msgs.append("matriz_ceu %d: falhou (%s)" % (i, e))
+
     if resultados:
         if pontos and len(resultados) != len(pontos):
             return "ERRO: 'resultados' e 'pontos' têm tamanhos diferentes."
@@ -170,7 +214,8 @@ def executar():
 
 
 # entradas opcionais que não foram criadas no componente viram None
-for _nome in ["contexto", "pontos", "normais", "epw", "resultados", "nome_resultado", "geometria"]:
+for _nome in ["contexto", "pontos", "normais", "epw", "resultados", "nome_resultado", "geometria",
+              "matriz_ceu"]:
     if _nome not in globals():
         globals()[_nome] = None
 

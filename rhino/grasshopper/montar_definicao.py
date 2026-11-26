@@ -44,6 +44,7 @@ ENTRADAS = [
     ("epw", False, "Caminho do arquivo .epw (opcional)"),
     ("resultados", True, "Resultado do Ladybug por sensor (opcional)"),
     ("nome_resultado", False, "Nome do resultado, ex.: radiacao_kwh_m2"),
+    ("matriz_ceu", True, "sky_mtx do LB Cumulative Sky Matrix (opcional)"),
     ("exportar", False, "Ligue a um botão"),
 ]
 
@@ -141,6 +142,57 @@ def criar_ghpython(gh, doc, x, y):
     return comp
 
 
+def criar_por_nome(gh, doc, nome, x, y):
+    """Coloca um componente (ou user object, como os do Ladybug) pelo nome."""
+    for px in gh.Instances.ComponentServer.ObjectProxies:
+        if px.Desc.Name == nome:
+            obj = gh.Instances.ComponentServer.EmitObject(px.Guid)
+            if obj is not None:
+                return colocar(doc, obj, x, y)
+    print("Aviso: componente '" + nome + "' não encontrado (Ladybug instalado?).")
+    return None
+
+
+def achar_param(lista, apelido):
+    alvo = apelido.strip("_").lower()
+    for p in lista:
+        for n in (p.NickName, p.Name):
+            if n and n.strip("_").lower() == alvo:
+                return p
+    print("Aviso: parâmetro '" + apelido + "' não encontrado.")
+    return None
+
+
+def ligar(destino, origem):
+    if destino is not None and origem is not None:
+        destino.AddSource(origem)
+
+
+def montar_ladybug(gh, doc, p_epw, entrada_matriz):
+    """LB Import EPW -> 2x LB Cumulative Sky Matrix (Tregenza e Reinhart) -> matriz_ceu."""
+    imp = criar_por_nome(gh, doc, "LB Import EPW", 150, 560)
+    if imp is None:
+        return
+    ligar(achar_param(imp.Params.Input, "_epw_file"), p_epw)
+    loc = achar_param(imp.Params.Output, "location")
+    dni = achar_param(imp.Params.Output, "direct_normal_rad")
+    dhi = achar_param(imp.Params.Output, "diffuse_horizontal_rad")
+
+    for i, alta in enumerate([False, True]):
+        mtx = criar_por_nome(gh, doc, "LB Cumulative Sky Matrix", 420, 560 + 160 * i)
+        if mtx is None:
+            return
+        ligar(achar_param(mtx.Params.Input, "_location"), loc)
+        ligar(achar_param(mtx.Params.Input, "_direct_rad"), dni)
+        ligar(achar_param(mtx.Params.Input, "_diffuse_rad"), dhi)
+        if alta:
+            t = colocar(doc, gh.Kernel.Special.GH_BooleanToggle(), 250, 720)
+            t.Value = True
+            t.NickName = "Reinhart"
+            ligar(achar_param(mtx.Params.Input, "high_density_"), t)
+        ligar(entrada_matriz, achar_param(mtx.Params.Output, "sky_mtx"))
+
+
 def montar():
     gh = abrir_grasshopper()
     doc = novo_documento(gh)
@@ -161,6 +213,8 @@ def montar():
     entrada["epw"].AddSource(p_epw)
     entrada["nome_resultado"].AddSource(p_nome)
     entrada["exportar"].AddSource(botao)
+
+    montar_ladybug(gh, doc, p_epw, entrada["matriz_ceu"])
 
     log = painel(gh, doc, "", "log", 850, 200, 360)
     log.Attributes.Bounds = sd.RectangleF(850, 200, 360, 160)
