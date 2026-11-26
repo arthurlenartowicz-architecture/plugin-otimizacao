@@ -44,7 +44,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
     (Tregenza/Reinhart), matriz de céu anual (modelo de Perez, equivalente ao
     `gendaymtx` do Radiance), malhas de sensores, estrutura de aceleração (BVH)
     e raycasting no Warp, importação da geometria do Rhino.
-  - [ ] 1b · Motor A: radiação incidente, horas de sol, sombra no entorno e
+  - [x] 1b · Motor A: radiação incidente, horas de sol, sombra no entorno e
     fotovoltaico. Validação contra o Ladybug (Incident Radiation, Sunlight Hours).
   - [ ] 1c · Motor B: matriz de coeficientes com reflexões, depois fator de luz
     diurna, DA, sDA, UDI e ASE. Validação contra o Honeybee-Radiance.
@@ -120,8 +120,17 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   patches); radiação = Σ visível · cos⁺ · E_p. Solo = patches espelhados com
   L = ρ·G_horiz/π (sem reflexões entre edifícios; isso é o motor B).
   FV simples: radiação × área × eficiência × (1 − perdas).
-  PENDENTE: comparar com LB Incident Radiation / Direct Sun Hours (cena de
-  teste montada pelo .gh; testes em `testes/test_ladybug_1b.py`).
+- Validação 1b (Curitiba, prédio + piso + torre, 1150 sensores do LB):
+  horas de sol 100% iguais; radiação erro médio 0,5%, máx 5%. Sensores
+  "encostados" (centro tocando outra superfície, ex.: piso na base de parede)
+  são ambíguos para qualquer motor e ficam fora (`sensores_encostados`).
+- Direções dos raios ≠ centros do céu: o Ladybug avalia o céu no meio da faixa
+  mas lança raios mais baixos (até 1,8° perto do zênite). Usamos
+  `Ceu.vetores_raio` = altitude do centro de área da faixa (sen = média dos
+  senos), a <0,5° dos vetores do LB. Matriz de céu continua no meio da faixa.
+- Solo: o LB dá a cada patch de solo ρ·(Σ energia do céu)/n_patches (não é
+  lambertiano). Padrão nosso = lambertiano (ρ·G_horiz·Ω/π, físico), ~15% a
+  mais de solo nas fachadas; `modelo_solo="ladybug"` para comparar.
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).

@@ -30,6 +30,37 @@ def normais_e_areas(vertices: torch.Tensor, faces: torch.Tensor):
     return cruz / dobro_area.clamp(min=1e-30)[:, None], dobro_area / 2
 
 
+def distancia_pontos_triangulos(p: torch.Tensor, vertices: torch.Tensor, faces: torch.Tensor):
+    """(N, T) distância de cada ponto a cada triângulo (ponto mais próximo)."""
+    a, b, c = (vertices[faces[:, i]][None] for i in range(3))  # (1, T, 3)
+    q = p[:, None, :]                                           # (N, 1, 3)
+    n, _ = normais_e_areas(vertices, faces)
+    n = n[None]
+    d_plano = ((q - a) * n).sum(-1)                             # (N, T)
+    proj = q - d_plano[..., None] * n
+    # dentro do triângulo se as três arestas "veem" a projeção do mesmo lado
+    def lado(u, v):
+        return (torch.linalg.cross(v - u, proj - u) * n).sum(-1)
+    dentro = (lado(a, b) >= 0) & (lado(b, c) >= 0) & (lado(c, a) >= 0)
+
+    def seg(u, v):
+        uv = v - u
+        t = (((q - u) * uv).sum(-1) / (uv * uv).sum(-1).clamp(min=1e-30)).clamp(0, 1)
+        return (q - (u + t[..., None] * uv)).norm(dim=-1)
+    d_borda = torch.minimum(torch.minimum(seg(a, b), seg(b, c)), seg(c, a))
+    return torch.where(dentro, d_plano.abs(), d_borda)
+
+
+def sensores_encostados(centros, normais, vertices, faces, tol: float = 0.05) -> torch.Tensor:
+    """(S,) bool: sensor cujo centro toca uma superfície não paralela à dele
+    (ex.: ponto do piso exatamente na base de uma parede). Resultado ambíguo
+    para qualquer motor de raios; útil para excluir de comparações."""
+    nf, _ = normais_e_areas(vertices, faces)
+    d = distancia_pontos_triangulos(centros, vertices, faces)
+    paralela = (normais @ nf.T).abs() > 0.99
+    return ((d < tol) & ~paralela).any(dim=1)
+
+
 @dataclass
 class Sensores:
     pontos: torch.Tensor   # (S, 3) já deslocados ao longo da normal

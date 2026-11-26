@@ -29,7 +29,8 @@ class Ceu:
     n_por_faixa: torch.Tensor      # (F,) patches em cada faixa (a última é a calota = 1)
     inicio_faixa: torch.Tensor     # (F,) índice do 1º patch de cada faixa
     faixa: torch.Tensor            # (P,) faixa de cada patch
-    altitude: torch.Tensor         # (P,) altitude do centro, graus
+    altitude: torch.Tensor         # (P,) altitude do centro (meio da faixa), graus
+    altitude_raio: torch.Tensor    # (P,) altitude que divide a área da faixa ao meio, graus
     azimute: torch.Tensor          # (P,) azimute do centro, graus (norte, horário)
     angulo_solido: torch.Tensor    # (P,) sr; soma = 2π
 
@@ -37,14 +38,26 @@ class Ceu:
     def n_patches(self) -> int:
         return int(self.altitude.shape[0])
 
-    @property
-    def vetores(self) -> torch.Tensor:
-        """(P, 3) direção do centro de cada patch (x leste, y norte, z cima)."""
-        alt = torch.deg2rad(self.altitude)
-        az = torch.deg2rad(self.azimute)
+    @staticmethod
+    def _direcoes(altitude, azimute) -> torch.Tensor:
+        alt = torch.deg2rad(altitude)
+        az = torch.deg2rad(azimute)
         return torch.stack(
             [torch.cos(alt) * torch.sin(az), torch.cos(alt) * torch.cos(az), torch.sin(alt)], dim=-1
         )
+
+    @property
+    def vetores(self) -> torch.Tensor:
+        """(P, 3) direção do centro de cada patch (x leste, y norte, z cima).
+        Usada para avaliar o céu (Perez), como o gendaymtx."""
+        return self._direcoes(self.altitude, self.azimute)
+
+    @property
+    def vetores_raio(self) -> torch.Tensor:
+        """(P, 3) direção representativa para lançar raios: altitude no centro de
+        área da faixa (sen alt = média dos senos das bordas). Fica a <0,5° dos
+        vetores do Ladybug; o meio da faixa erra até 1,8° perto do zênite."""
+        return self._direcoes(self.altitude_raio, self.azimute)
 
     def indice(self, vetores: torch.Tensor) -> torch.Tensor:
         """Patch que contém cada direção (N, 3). -1 abaixo do horizonte."""
@@ -68,18 +81,21 @@ def criar_ceu(mf: int = 1, device=None) -> Ceu:
     alpha = 90.0 / (7 * mf + 0.5)
     n_por_faixa = [mf * PATCHES_TREGENZA[i // mf] for i in range(7 * mf)] + [1]
 
-    faixa, alt, az, omega, inicio = [], [], [], [], []
+    faixa, alt, alt_raio, az, omega, inicio = [], [], [], [], [], []
     for i, n in enumerate(n_por_faixa):
         inicio.append(len(alt))
         a0 = i * alpha
         a1 = min((i + 1) * alpha, 90.0)
         calota = i == len(n_por_faixa) - 1
         centro = 90.0 if calota else (a0 + a1) / 2
+        s0, s1 = math.sin(math.radians(a0)), math.sin(math.radians(a1))
+        centro_raio = 90.0 if calota else math.degrees(math.asin((s0 + s1) / 2))
         # ângulo sólido de um anel: 2π (sen a1 − sen a0), dividido entre os n patches
         anel = 2 * math.pi * (math.sin(math.radians(a1)) - math.sin(math.radians(a0)))
         for j in range(n):
             faixa.append(i)
             alt.append(centro)
+            alt_raio.append(centro_raio)
             az.append(0.0 if calota else j * 360.0 / n)
             omega.append(anel / n)
 
@@ -91,6 +107,7 @@ def criar_ceu(mf: int = 1, device=None) -> Ceu:
         inicio_faixa=torch.tensor(inicio, dtype=torch.int64, device=device),
         faixa=torch.tensor(faixa, dtype=torch.int64, device=device),
         altitude=torch.tensor(alt, **f64),
+        altitude_raio=torch.tensor(alt_raio, **f64),
         azimute=torch.tensor(az, **f64),
         angulo_solido=torch.tensor(omega, **f64),
     )

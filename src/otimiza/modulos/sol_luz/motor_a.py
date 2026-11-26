@@ -30,22 +30,34 @@ class CeuDirecional:
     n_ceu: int             # as primeiras n_ceu direções são do céu
 
 
-def ceu_direcional(matriz: MatrizCeu, refletancia_solo: float = 0.2, horas=None) -> CeuDirecional:
+def ceu_direcional(matriz: MatrizCeu, refletancia_solo: float = 0.2, horas=None,
+                   modelo_solo: str = "lambertiano") -> CeuDirecional:
     """Transforma a matriz de céu em direções + energia acumulada.
 
     horas: máscara ou índices das horas a somar (padrão: o ano todo).
+    modelo_solo:
+      "lambertiano" — solo difuso uniforme, E_p = ρ · G_horiz · Ω_p / π (físico)
+      "ladybug"     — como o LB Incident Radiation: cada patch de solo recebe
+                      ρ · (Σ energia do céu) / n_patches. Dá ~15% menos nas
+                      fachadas; usar só para comparar com o Ladybug.
     """
     L = matriz.total if horas is None else matriz.total[:, horas]
     ceu = matriz.ceu
     om = ceu.angulo_solido.to(L)
-    v = ceu.vetores.to(L)
+    v = ceu.vetores_raio.to(L)  # direções dos raios (centro de área), como o Ladybug
     energia_ceu = (L * om[:, None]).sum(dim=1) / 1000.0  # kWh/m²
     if refletancia_solo <= 0:
         return CeuDirecional(v, energia_ceu, ceu.n_patches)
 
-    g_horiz = (energia_ceu * v[:, 2]).sum()  # global horizontal acumulada, kWh/m²
     v_solo = v * torch.tensor([1.0, 1.0, -1.0], dtype=v.dtype, device=v.device)
-    energia_solo = refletancia_solo * g_horiz / math.pi * om
+    if modelo_solo == "lambertiano":
+        g_horiz = (energia_ceu * v[:, 2]).sum()  # global horizontal acumulada, kWh/m²
+        energia_solo = refletancia_solo * g_horiz / math.pi * om
+    elif modelo_solo == "ladybug":
+        energia_solo = torch.full_like(energia_ceu, refletancia_solo * energia_ceu.sum().item()
+                                       / ceu.n_patches)
+    else:
+        raise ValueError(f"modelo_solo desconhecido: {modelo_solo}")
     return CeuDirecional(torch.cat([v, v_solo]), torch.cat([energia_ceu, energia_solo]), ceu.n_patches)
 
 
