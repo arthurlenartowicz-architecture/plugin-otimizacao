@@ -103,8 +103,10 @@ o lado do GH).
 
    Cria `otimizar.gh`: a "Sala exemplo" (sala do protótipo em Breps, `sala_exemplo.py`),
    5 sliders, o componente **Otimizar** (`otimizar_gh.py`, lido do disco), painéis
-   `problema` e `opcoes`, botões `iniciar` / `parar` / `avaliar`.
-   Rode também de novo o `montar_pareto.py` (o Pareto ganhou o botão `aplicar`).
+   `problema` e `opcoes`, botões `iniciar` / `parar` / `avaliar` e, embaixo, o
+   **Pareto** (o mesmo do `pareto.gh`, com `caso = sala_gh`). Tudo numa definição só:
+   o Pareto recarrega sozinho no fim da otimização e o `aplicar` acha os sliders.
+   Se mudar o `caso` em `opcoes`, mude também o painel `caso` do Pareto.
 
 2. Na sua definição: copie o Otimizar com os painéis e ligue
    - em `genoma`, os **sliders** (contínuo com as casas decimais do slider; inteiro se
@@ -150,8 +152,8 @@ o lado do GH).
    da interface, em blocos de ~0,25 s (o Rhino continua respondendo; a vista não é
    redesenhada). Progresso na mensagem do componente e na barra de status; **Esc** ou
    `parar` interrompem (o que já foi avaliado é gravado). No fim os sliders voltam aos
-   valores originais e o `resultado.json` é gravado; no `pareto.gh` (`caso` igual),
-   escolha a solução e aperte `aplicar` para levá-la aos sliders.
+   valores originais, o `resultado.json` é gravado e o Pareto recarrega; escolha a
+   solução no slider `solucao` e aperte `aplicar` para levá-la aos sliders.
 
 **Validação** (sala de exemplo × `prototipos.predio`): em `otimizar.gh`, deixe
 `caso = sala_gh`, aperte `avaliar` e rode

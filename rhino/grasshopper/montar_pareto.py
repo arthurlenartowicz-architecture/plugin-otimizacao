@@ -117,43 +117,49 @@ def montar():
     gh.Instances.DocumentServer.AddDocument(doc)
     gh.Instances.ActiveCanvas.Document = doc
 
-    comp = criar_ghpython(gh, doc, 520, 120)
+    adicionar_pareto(gh, doc)
+    painel(gh, doc,
+           "Rode antes (PowerShell): .venv\\Scripts\\python.exe scripts\\otimizar_exemplo.py trelica "
+           "(ou sala), ou aperte 'rodar'. O slider escolhe a solução; 'geometria' é a escolhida, "
+           "'todas' mostra a frente lado a lado. 'aplicar' põe a solução nos sliders do Otimizar.",
+           "LEIA", 100, 280, 380, 90, True)
+    gh.Instances.ActiveCanvas.Refresh()
+    gh.Kernel.GH_DocumentIO(doc).SaveQuiet(SAIDA_GH)
+    print("Definição montada e salva em " + SAIDA_GH)
+
+
+def adicionar_pareto(gh, doc, x0=0, y0=0, caso="trelica", com_rodar=True):
+    """Coloca o componente Pareto e seus controles num documento (com deslocamento x0, y0).
+    Usado aqui e pelo montar_otimizar.py (Otimizar e Pareto na mesma definição)."""
+    comp = criar_ghpython(gh, doc, x0 + 520, y0 + 120)
     entrada = dict((p.NickName, p) for p in comp.Params.Input)
     saida = dict((p.NickName, p) for p in comp.Params.Output)
-    entrada["caso"].AddSource(painel(gh, doc, "trelica", "caso", 300, 100, 120))
-    botao = colocar(doc, gh.Kernel.Special.GH_ButtonObject(), 340, 140)
-    botao.NickName = "rodar"
-    entrada["rodar"].AddSource(botao)
+    entrada["caso"].AddSource(painel(gh, doc, caso, "caso", x0 + 300, y0 + 100, 120))
+    if com_rodar:
+        botao = colocar(doc, gh.Kernel.Special.GH_ButtonObject(), x0 + 340, y0 + 140)
+        botao.NickName = "rodar"
+        entrada["rodar"].AddSource(botao)
     sl = gh.Kernel.Special.GH_NumberSlider()
     sl.Slider.Minimum = System.Decimal(0)
     sl.Slider.Maximum = System.Decimal(199)
     sl.Slider.DecimalPlaces = 0
     sl.Slider.Value = System.Decimal(0)
     sl.NickName = "solucao"
-    colocar(doc, sl, 220, 180)
+    colocar(doc, sl, x0 + 220, y0 + 180)
     entrada["solucao"].AddSource(sl)
-    ap = colocar(doc, gh.Kernel.Special.GH_ButtonObject(), 340, 260)
+    ap = colocar(doc, gh.Kernel.Special.GH_ButtonObject(), x0 + 340, y0 + 260)
     ap.NickName = "aplicar"
     entrada["aplicar"].AddSource(ap)
-    tg = colocar(doc, gh.Kernel.Special.GH_BooleanToggle(), 300, 220)
+    tg = colocar(doc, gh.Kernel.Special.GH_BooleanToggle(), x0 + 300, y0 + 220)
     tg.NickName = "so_representantes"
     entrada["so_representantes"].AddSource(tg)
-    log = painel(gh, doc, "", "log", 760, 60, 420, 110, True)
-    log.AddSource(saida["log"])
+    painel(gh, doc, "", "log", x0 + 760, y0 + 60, 420, 110, True).AddSource(saida["log"])
     for k, nome in enumerate(["parametros", "objetivos"]):
-        pn = painel(gh, doc, "", nome, 760, 180 + 130 * k, 300, 120, True)
-        pn.AddSource(saida[nome])
-    tab = painel(gh, doc, "", "tabela", 760, 450, 560, 220, True)
-    tab.AddSource(saida["tabela"])
-    nota = painel(gh, doc,
-                  "Rode antes (PowerShell): .venv\\Scripts\\python.exe scripts\\otimizar_exemplo.py trelica "
-                  "(ou sala), ou aperte 'rodar'. O slider escolhe a solução; 'geometria' é a escolhida, "
-                  "'todas' mostra a frente lado a lado. 'aplicar' põe a solução nos sliders do Otimizar.",
-                  "LEIA", 100, 280, 380, 90, True)
-    gh.Instances.ActiveCanvas.Refresh()
-    gh.Kernel.GH_DocumentIO(doc).SaveQuiet(SAIDA_GH)
-    print("Definição montada e salva em " + SAIDA_GH)
-    return nota
+        painel(gh, doc, "", nome, x0 + 760, y0 + 180 + 130 * k, 300, 120, True).AddSource(saida[nome])
+    painel(gh, doc, "", "tabela", x0 + 760, y0 + 450, 560, 220, True).AddSource(saida["tabela"])
+    return comp
 
 
-montar()
+# montar_otimizar.py carrega este arquivo só para usar adicionar_pareto (_SO_FUNCOES)
+if not globals().get("_SO_FUNCOES"):
+    montar()

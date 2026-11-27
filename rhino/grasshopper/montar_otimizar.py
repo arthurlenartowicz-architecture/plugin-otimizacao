@@ -11,6 +11,8 @@ Cria um documento novo com:
     e no genoma;
   - "Otimizar" (GhPython, código de otimizar_gh.py), painéis de problema, opções,
     log e métricas, botões iniciar / parar / avaliar;
+  - "Pareto" (o mesmo do montar_pareto.py), abaixo, com caso = sala_gh: recarrega
+    sozinho no fim da otimização, e o `aplicar` põe a solução nos sliders;
 e salva rhino/grasshopper/otimizar.gh. Nada é calculado na montagem. Para usar com a
 sua definição: copie o componente Otimizar com os painéis e troque a sala pelos seus
 componentes.
@@ -178,6 +180,16 @@ def montar():
            "variante atual; 'iniciar' otimiza (Esc para). Resultado em resultados/<caso>/, "
            "visto no pareto.gh (botão 'aplicar' devolve a solução aos sliders).",
            "LEIA", 60, 260, 360, 80, True)
+    # Pareto na mesma definição (código do montar_pareto.py, sem montar o pareto.gh)
+    import io
+    arq = os.path.join(PASTA_GH, "montar_pareto.py")
+    ns = {"__file__": arq, "__name__": "montar_pareto", "_SO_FUNCOES": True}
+    exec(compile(io.open(arq, encoding="utf-8").read().replace("# -*- coding: utf-8 -*-", ""),
+                 arq, "exec"), ns)
+    ns["adicionar_pareto"](gh, doc, x0=200, y0=700, caso="sala_gh", com_rodar=False)
+    painel(gh, doc, "PARETO: depois de otimizar, escolha a solução no slider 'solucao' e "
+                    "aperte 'aplicar' para levá-la aos sliders lá em cima.",
+           "LEIA", 60, 820, 360, 50, True)
     gh.Instances.ActiveCanvas.Refresh()
     gh.Kernel.GH_DocumentIO(doc).SaveQuiet(SAIDA_GH)
     print("Definição montada e salva em " + SAIDA_GH)
