@@ -91,12 +91,37 @@ static class Programa
             new JsonObject { ["nome"] = "altura", ["tipo"] = "continuo", ["minimo"] = 2.5, ["maximo"] = 6.0, ["casas"] = 1 },
             new JsonObject { ["nome"] = "vidro_sul", ["tipo"] = "categorico", ["opcoes"] = Lista("nao", "sim") });
         var nomes = new[] { "largura", "profundidade", "altura", "vidro_sul" };
+
+        // modelo da janela de Otimização (4f2): o problema da otimização sai dele
+        var catalogo = Catalogo.De(cli.Metricas());
+        var cfg = new Configuracao { Populacao = 16, Geracoes = 4 };
+        cfg.Objetivos.Add(new Objetivo { Chave = "termico.compacidade", Sentido = "min" });
+        cfg.Objetivos.Add(new Objetivo { Chave = "termico.volume", Sentido = "max" });
+        cfg.Restricoes.Add(new Restricao { Chave = "termico.wwr", Operador = "<=", Valor = 30 });
+        var vazia = new Configuracao();
+        var gaDois = Configuracao.DeJson(cfg.ParaJson());
+        gaDois.Algoritmo = "ga";
+        var deTexto = Configuracao.DeProblema(new[] { "sol_luz.da\nmin sol_luz.ase # comentário", "sol_luz.udi >= 50" }, catalogo);
+        var opMisto = Opcoes.De(cfg.ComoOpcoes().Concat(new[] { "populacao = 99" }));
+        rel["janela"] = new JsonObject
+        {
+            ["catalogo"] = new JsonArray(catalogo.Select(m => (JsonNode)new JsonObject
+                { ["chave"] = m.Chave, ["unidade"] = m.Unidade, ["sentido"] = m.Sentido }).ToArray()),
+            ["problema"] = Lista(cfg.Problema().ToArray()),
+            ["ida_volta"] = Configuracao.DeJson(JsonNode.Parse(cfg.ParaJson().ToJsonString())).ParaJson().ToJsonString()
+                            == cfg.ParaJson().ToJsonString(),
+            ["de_texto"] = deTexto.ParaJson(),
+            ["erros_vazia"] = Lista(vazia.Validar().ToArray()),
+            ["erros_ga_dois"] = Lista(gaDois.Validar().ToArray()),
+            ["auto"] = Lista(Configuracao.AlgoritmoAuto(1), Configuracao.AlgoritmoAuto(2), Configuracao.AlgoritmoAuto(3)),
+            ["opcoes_populacao"] = opMisto.Int("populacao", 0), ["opcoes_nivel"] = opMisto.Texto("nivel", ""),
+        };
         var genoma = new JsonArray(nomes.Select(n => (JsonNode)new JsonObject
         { ["nome"] = n, ["guid"] = "guid-" + n, ["tipo"] = "x" }).ToArray());
         var pedido = new JsonObject
         {
             ["versao"] = 1, ["parametros"] = parametros,
-            ["problema"] = Lista("min termico.compacidade", "max termico.volume", "termico.wwr <= 30"),
+            ["problema"] = Lista(cfg.Problema().ToArray()),     // o mesmo texto da janela
             ["nivel"] = "rapido", ["algoritmo"] = "auto", ["populacao"] = 16, ["geracoes"] = 4, ["semente"] = 3,
             ["escala"] = 1.0 / Mm, ["materiais"] = new JsonObject(), ["epw"] = epw, ["caso"] = "teste_cs",
             ["saida"] = saida, ["fixas"] = fixas,
@@ -177,6 +202,11 @@ static class Programa
                                      ["log"] = Lista(w1.Log.ToArray()) };
         rel["w2"] = new JsonObject { ["estado"] = w2.Estado, ["gerados"] = w2.Gerados, ["esperou"] = w2Esperou,
                                      ["log"] = Lista(w2.Log.ToArray()) };
+
+        // gráficos: GET /progresso no fim e o resultado.json convertido para o mesmo formato
+        var pg = cli.Pedir("GET", "/progresso");
+        rel["progresso"] = pg.DeepClone();
+        rel["arquivo"] = DadosGraficos.DeResultadoJson(Path.Combine(saida, "resultado.json"));
 
         File.WriteAllText(relatorio, rel.ToJsonString(ClienteProtocolo.Json));
         return 0;

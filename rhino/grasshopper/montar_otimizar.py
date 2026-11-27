@@ -40,6 +40,7 @@ SAIDA_GH = os.path.join(PASTA_GH, "otimizar_cs.gh" if USAR_CS else "otimizar.gh"
 SAIDA_GH = globals().get("_SAIDA_GH") or SAIDA_GH
 PROBLEMA = globals().get("_PROBLEMA", "max sol_luz.da\nmax sol_luz.udi\nmin sol_luz.ase")
 CASO = globals().get("_CASO", "sala_gh")
+OPCOES = globals().get("_OPCOES")          # texto do painel opcoes (None = o padrão abaixo)
 
 LISTA, ITEM = "list", "item"
 OTIMIZAR_IN = ([("genoma", LISTA, "sliders e Value Lists que o otimizador mexe")]
@@ -184,11 +185,12 @@ def montar():
     o_in["genoma"].AddSource(s)
     for nome in SALA_OUT:
         o_in[nome].AddSource(s_out[nome])
-    o_in["problema"].AddSource(painel(gh, doc, PROBLEMA, "problema", 460, 330, 180, 60, True))
-    o_in["opcoes"].AddSource(painel(gh, doc, "caso = " + CASO + "\npopulacao = 48\ngeracoes = 20\n"
-                                             "nivel = rapido\nlote = 4\nmalha = minima\n"
-                                             "modo = principal",
-                                    "opcoes", 460, 400, 180, 100, True))
+    if PROBLEMA:     # None (conferir_janela.py): o problema vem da janela de Otimização
+        o_in["problema"].AddSource(painel(gh, doc, PROBLEMA, "problema", 460, 330, 180, 60, True))
+    texto_op = OPCOES if OPCOES is not None else (
+        "caso = " + CASO + "\npopulacao = 48\ngeracoes = 20\nnivel = rapido\nlote = 4\n"
+        "malha = minima\nmodo = principal")
+    o_in["opcoes"].AddSource(painel(gh, doc, texto_op, "opcoes", 460, 400, 180, 100, True))
     for k, nome in enumerate(["iniciar", "parar", "avaliar"]):
         o_in[nome].AddSource(botao(gh, doc, nome, 520, 520 + 30 * k))
     painel(gh, doc, "", "log", 980, 80, 460, 160, True).AddSource(o_out["log"])

@@ -27,6 +27,8 @@ def _rotas(servico: Servico, desligar):
     return {
         ("GET", "/estado"): estado,
         ("GET", "/metricas"): lambda _: dict(versao=pr.VERSAO, metricas=metricas()),
+        ("GET", "/progresso"): lambda d: (dict(versao=pr.VERSAO, estado="livre") if servico.otim is None
+                                          else servico.otim.progresso_dict(int(d.get("desde", 0)))),
         ("POST", "/iniciar"): servico.iniciar,
         ("POST", "/tarefas"): lambda d: servico.exigir().tarefas(int(d.get("maximo", 0))),
         ("POST", "/resultados"): lambda d: servico.exigir().resultados(d.get("resultados", [])),

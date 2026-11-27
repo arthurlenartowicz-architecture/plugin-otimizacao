@@ -185,6 +185,8 @@ class Otimizacao:
         self.sessao = Sessao(cfg.espaco, p.objetivos, [p.sentido(o) for o in p.objetivos],
                              d.get("algoritmo", "auto"), int(d.get("populacao", 48)),
                              int(d.get("geracoes", 20)), int(d.get("semente", 0)))
+        from otimiza.otimizacao.progresso import Progresso
+        self.progresso = Progresso(self.sessao.nomes, self.sessao.sentidos)   # GET /progresso
         self.caso = str(d.get("caso", "gh"))
         self.saida = Path(d.get("saida") or RAIZ / "resultados" / self.caso)
         self.reatribuir_s = float(d.get("reatribuir_s", 120))
@@ -332,6 +334,7 @@ class Otimizacao:
                 F = np.array([self.memo[k][0] for k in self.chaves], dtype=float).reshape(-1, m)
                 viol = np.array([self.memo[k][1] for k in self.chaves], dtype=float)
                 self.sessao.responder(F, viol)
+                self.progresso.registrar(*self.sessao.problema.registro[-1])  # mesmos F/violação
                 self._novo_lote()
         except Exception:
             with self.trava:
@@ -376,6 +379,12 @@ class Otimizacao:
                     tempo_gpu_s_por_variante=round(s_gpu / n_gpu, 5) if n_gpu else None,
                     tempo_gpu_s=round(s_gpu, 3), variantes_geradas=len(tc) or None,
                     tempo_total_s=round(time.perf_counter() - self.t0, 2))
+
+    def progresso_dict(self, desde: int = 0) -> dict:
+        """GET /progresso: estado + histórico por geração (a partir de `desde`) + frente."""
+        with self.trava:
+            return dict(self.estado_dict(), parametros_espaco=self.cfg.espaco.descrever(),
+                        **self.progresso.dict(desde))
 
     def estado_dict(self) -> dict:
         with self.trava:

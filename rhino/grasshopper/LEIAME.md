@@ -216,6 +216,7 @@ contexto, entorno.
 |---|---|---|
 | `GET /estado` | | `estado` (livre, gerando, avaliando, fim, erro), `rodada`, `parametros` (nomes), `geracao`, `geracoes`, `lote`, `faltam`, `avaliacoes`, `no_cache`, `erro`, `arquivo`, tempos |
 | `GET /metricas` | | `{"metricas": {modulo: {metrica: {unidade, sentido, descricao}}}}` |
+| `GET /progresso` | `?desde=g` (opcional) | o mesmo do `/estado` + `parametros_espaco`, `objetivos` [{nome, sentido}], `geracoes_registradas`, `historico` (por geração a partir de `desde`: `avaliacoes`, `viaveis`, `n_frente`, `melhor` por objetivo, `hipervolume` com normalização fixa da 1ª geração; 1 objetivo: null), `frente` (até 300: `indice`, `geracao`, `cluster`, `objetivos` em lista, `parametros`), `n_frente`. Usado pelos gráficos da janela de Otimização (4f2); só acrescentado, versão continua 1 |
 | `POST /iniciar` | `parametros`, `problema`, `nivel`, `algoritmo`, `populacao`, `geracoes`, `semente`, `epw`, `escala`, `materiais`, `fixas`, `caso`, `saida`, `cliente`, `reatribuir_s` | estado (substitui a otimização anterior) |
 | `POST /tarefas` | `{"maximo": 16}` (0 = todas) | estado + `tarefas: [{"id", "parametros": {nome: valor}}]`; lista vazia = aguardar (GPU avaliando ou outro cliente terminando) |
 | `POST /resultados` | `{"resultados": [{"id", "geometria", "tempo_s"?} \| {"id", "erro"}]}` | estado + `aceitos`, `erros` |

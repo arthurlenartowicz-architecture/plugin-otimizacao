@@ -187,6 +187,18 @@ def test_http_trelica_dois_clientes(servidor, tmp_path):
     assert dados["solucoes"] and dados["solucoes"][0]["geometria"]["tipo"] == "barras"
     assert dados["info"]["cliente"] == {"x": 1}
     assert dados["info"]["tempo_cliente_s_por_variante"] is not None
+    # GET /progresso (4f2): uma linha de histórico por geração, frente = a do resultado.json
+    with urllib.request.urlopen(url + "/progresso") as r:
+        pg = json.loads(r.read())
+    assert pg["estado"] == "fim" and pg["geracoes_registradas"] == 6 and len(pg["historico"]) == 6
+    assert [h["avaliacoes"] for h in pg["historico"]] == [20 * (g + 1) for g in range(6)]
+    hv = [h["hipervolume"] for h in pg["historico"]]
+    assert all(b >= a - 1e-12 for a, b in zip(hv, hv[1:])) and hv[-1] > 0
+    chave = lambda p: json.dumps(p, sort_keys=True)          # noqa: E731
+    assert {chave(s["parametros"]) for s in pg["frente"]} == \
+        {chave(s["parametros"]) for s in dados["solucoes"]}
+    with urllib.request.urlopen(url + "/progresso?desde=4") as r:
+        assert [h["geracao"] for h in json.loads(r.read())["historico"]] == [4, 5]
 
 
 @pytest.mark.parametrize("problema,alg", [

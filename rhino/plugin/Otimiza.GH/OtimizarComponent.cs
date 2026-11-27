@@ -7,25 +7,39 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json.Nodes;
+using GH_IO.Serialization;
+using Grasshopper.GUI;
+using Grasshopper.GUI.Canvas;
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Attributes;
 using Grasshopper.Kernel.Types;
 using Otimiza.Cliente;
+using Otimiza.UI;
 using Rhino;
 
 namespace Otimiza.GH
 {
-    public class OtimizarComponent : GH_Component
+    public class OtimizarComponent : GH_Component, IAnfitriao
     {
         const string RaizPadrao = @"C:\Users\PC\Documents\plugin-otimizacao";
+        const string ChaveConfig = "otimiza.janela";
         static readonly string[] Outras = { "barras", "apoios", "cargas", "secao" };
         static List<string>? metricas;     // cache de GET /metricas
         LacoGH? laco;
+        // janela de Otimização (4f2): a configuração dela é salva no .gh (Write/Read)
+        Configuracao config = new Configuracao();
+        JanelaOtimizacao? janela;
+        bool pedidoIniciar;
+        List<string> problemaPainel = new List<string>();
+        Opcoes opcoesPainel = Opcoes.De(null);
+        string raizVista = RaizPadrao;
 
         public OtimizarComponent()
             : base("Otimizar", "Otimizar",
                    "O Grasshopper gera a geometria; o motor em Python avalia na GPU e otimiza (protocolo v1).\n" +
                    "Ligue em genoma os sliders e Value Lists; a geometria nas entradas por rótulo; " +
-                   "escreva o problema e aperte iniciar. Esc ou parar interrompem.",
+                   "escreva o problema e aperte iniciar. Esc ou parar interrompem.\n" +
+                   "Duplo clique abre a janela de Otimização (objetivos, restrições e gráficos ao vivo).",
                    "Otimiza", "Otimização")
         { }
 
@@ -44,7 +58,8 @@ namespace Otimiza.GH
             Lista("apoios", "pontos de apoio");
             Lista("cargas", "pontos com carga (força em opcoes: forca = 0,0,-10)");
             Textos("secao", "seção do catálogo TUBOS (ex. RO114.3/4): uma ou uma por barra");
-            Textos("problema", "uma linha por objetivo/restrição: max sol_luz.da, sol_luz.ase, sol_luz.udi >= 50");
+            Textos("problema", "uma linha por objetivo/restrição: max sol_luz.da, sol_luz.ase, sol_luz.udi >= 50 " +
+                               "(se ligado, manda no problema; desligado, vale o da janela)");
             Textos("opcoes", "chave = valor (populacao, geracoes, nivel, caso, malha, lote, modo, porta…)");
             Botao("iniciar");
             Botao("parar");
@@ -164,9 +179,28 @@ namespace Otimiza.GH
             if (laco != null) DA.SetData("progresso", laco.Ciclo.Ativo ? laco.Ciclo.Progresso() : laco.Ciclo.Estado);
         }
 
+        /// <summary>Problema: o painel 'problema' se estiver ligado; senão o da janela.</summary>
+        List<string> Problema(IGH_DataAccess DA)
+        {
+            var p = Textos(DA, "problema");
+            problemaPainel = p;
+            if (p.Count > 0) return p;
+            if (config.Objetivos.Count == 0)
+                throw new InvalidOperationException("sem problema: dê duplo clique no componente para abrir a janela " +
+                                                    "de Otimização, ou ligue um Panel em 'problema'");
+            return config.Problema();
+        }
+
         string? Resolver(IGH_DataAccess DA)
         {
-            var op = Opcoes.De(Textos(DA, "opcoes"));
+            var linhasOp = Textos(DA, "opcoes");
+            opcoesPainel = Opcoes.De(linhasOp);
+            problemaPainel = Textos(DA, "problema");
+            // a janela dá os padrões (nivel, populacao, geracoes, algoritmo); o painel opcoes manda
+            var op = Opcoes.De(config.ComoOpcoes().Concat(linhasOp));
+            raizVista = Raiz(op);
+            bool pediu = pedidoIniciar;
+            pedidoIniciar = false;
             int porta = op.Int("porta", 8765);
             bool rodando = laco != null && laco.Ciclo.Ativo;
             string? log = null;
@@ -175,7 +209,7 @@ namespace Otimiza.GH
                 laco!.Parar("botão parar");
                 return Junto(laco.Ciclo.Log);
             }
-            bool iniciar = Botao(DA, "iniciar") && !rodando;
+            bool iniciar = (Botao(DA, "iniciar") || pediu) && !rodando;
             if (iniciar && op.Texto("modo", "").ToLowerInvariant() == "trabalhador")
             {
                 laco = new LacoGH(this, op, null, Genoma.De(this), null);   // mesmos sliders do principal
@@ -183,8 +217,7 @@ namespace Otimiza.GH
             else if (iniciar)
             {
                 var genes = Genoma.De(this);
-                var problema = Textos(DA, "problema");
-                if (problema.Count == 0) throw new InvalidOperationException("escreva o problema (Panel ligado em 'problema')");
+                var problema = Problema(DA);
                 string raiz = Raiz(op), caso = op.Texto("caso", "gh");
                 var pedido = PedidoBase(op, problema);
                 pedido["parametros"] = new JsonArray(genes.Select(g => g.Protocolo.DeepClone()).ToArray());
@@ -242,7 +275,7 @@ namespace Otimiza.GH
             var sw = Stopwatch.StartNew();
             var geo = Geometria.Atual(entradas, op);
             double tGh = sw.Elapsed.TotalSeconds;
-            var pedido = PedidoBase(op, Textos(DA, "problema"));
+            var pedido = PedidoBase(op, Problema(DA));
             pedido["geometrias"] = new JsonArray(geo);
             var fixas = Geometria.Malhas(entradas, Geometria.Fixos, Geometria.Parametros(op.Texto("malha", "minima")));
             if (fixas.Count > 0) pedido["fixas"] = new JsonObject { ["malhas"] = fixas };
@@ -263,6 +296,95 @@ namespace Otimiza.GH
             return string.Format(System.Globalization.CultureInfo.InvariantCulture,
                                  "Avaliado em {0:0.00} s (GH {1:0} ms para malhar e converter). Gravado {2}",
                                  J.Num(r["tempo_s"], 0), 1000 * tGh, arq);
+        }
+
+        // ------------------------------------------------------------ janela de Otimização (4f2)
+        public void AbrirJanela()
+        {
+            if (janela != null && !janela.IsDisposed)
+            {
+                janela.BringToFront();
+                return;
+            }
+            string pastaWeb = Path.Combine(Path.GetDirectoryName(
+                Grasshopper.Instances.ComponentServer.FindAssemblyByObject(this)?.Location ?? "") ?? "", "web");
+            janela = new JanelaOtimizacao(this, pastaWeb) { Owner = Rhino.UI.RhinoEtoApp.MainWindow };
+            janela.Closed += (s, e) => janela = null;
+            janela.Show();
+        }
+
+        public override void AppendAdditionalMenuItems(System.Windows.Forms.ToolStripDropDown menu)
+        {
+            base.AppendAdditionalMenuItems(menu);
+            Menu_AppendItem(menu, "Abrir janela de Otimização…", (s, e) => AbrirJanela());
+        }
+
+        public override void CreateAttributes() => m_attributes = new AtributosOtimizar(this);
+
+        public override void RemovedFromDocument(GH_Document document)
+        {
+            janela?.Close();
+            base.RemovedFromDocument(document);
+        }
+
+        public override bool Write(GH_IWriter writer)
+        {
+            writer.SetString(ChaveConfig, config.ParaJson().ToJsonString());
+            return base.Write(writer);
+        }
+
+        public override bool Read(GH_IReader reader)
+        {
+            string txt = "";
+            if (reader.TryGetString(ChaveConfig, ref txt) && !string.IsNullOrEmpty(txt))
+            {
+                try { config = Configuracao.DeJson(JsonNode.Parse(txt)); }
+                catch (Exception) { config = new Configuracao(); }
+            }
+            return base.Read(reader);
+        }
+
+        // IAnfitriao
+        Configuracao IAnfitriao.Config => config;
+        void IAnfitriao.ConfigMudou() => OnPingDocument()?.Modified();      // pede para salvar o .gh
+        IList<string> IAnfitriao.ProblemaDoPainel => problemaPainel;
+        IEnumerable<string> IAnfitriao.OpcoesDoPainel => opcoesPainel.Itens.Select(kv => kv.Key);
+        int IAnfitriao.Porta => opcoesPainel.Int("porta", 8765);
+        bool IAnfitriao.Rodando => laco != null && laco.Ciclo.Ativo;
+        string? IAnfitriao.ArquivoResultado =>
+            Path.Combine(raizVista, "resultados", opcoesPainel.Texto("caso", "gh"), "resultado.json");
+        string IAnfitriao.Titulo => (OnPingDocument()?.DisplayName ?? "Grasshopper") + " · " + NickName;
+
+        void IAnfitriao.Iniciar()
+        {
+            pedidoIniciar = true;
+            ExpireSolution(true);                       // o SolveInstance lê as entradas e inicia
+        }
+
+        void IAnfitriao.Parar() => laco?.Parar("janela");
+
+        void IAnfitriao.LigarServidor() => SubirServidor(raizVista, opcoesPainel.Int("porta", 8765));
+
+        void IAnfitriao.Aplicar(JsonObject parametros)
+        {
+            if (laco != null && laco.Ciclo.Ativo) return;
+            var genes = Genoma.De(this);
+            var doc = OnPingDocument();
+            if (doc == null) return;
+            // fora da solução em curso: põe os valores e recalcula (a geometria aparece no Rhino)
+            doc.ScheduleSolution(5, d => Genoma.Aplicar(genes, parametros));
+        }
+    }
+
+    /// <summary>Duplo clique no componente abre a janela de Otimização.</summary>
+    sealed class AtributosOtimizar : GH_ComponentAttributes
+    {
+        public AtributosOtimizar(OtimizarComponent dono) : base(dono) { }
+
+        public override GH_ObjectResponse RespondToMouseDoubleClick(GH_Canvas sender, GH_CanvasMouseEvent e)
+        {
+            ((OtimizarComponent)Owner).AbrirJanela();
+            return GH_ObjectResponse.Handled;
         }
     }
 }

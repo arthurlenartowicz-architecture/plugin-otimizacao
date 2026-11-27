@@ -655,3 +655,33 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
 - O CMA-ES do pymoo não é reprodutível entre processos/ordens de teste (depende de estado
   global de números aleatórios): no Rastrigin 5D a semente 0 deu 0 sozinha e 1,99 na suíte.
   O `test_sessao_igual_ao_otimizar` (mesmo processo) continua idêntico.
+- 4f2 (2026-11-27), servidor: `otimizacao/progresso.py` (`Progresso.registrar` por lote, com
+  os mesmos F/violação do registro da Sessao): histórico por geração (avaliações, viáveis,
+  n na frente, melhor por objetivo no sentido original, hipervolume) e a frente atual (=
+  `Resultado.frente()`; 1 objetivo = `melhores(20)`), até 300 pontos com clusters, refeita só
+  quando chega geração nova. Hipervolume com normalização FIXA (ideal/nadir dos viáveis da 1ª
+  geração com algum, referência 1,1): nunca diminui; até 3 objetivos exato (pymoo), 4+ Monte
+  Carlo com 20 mil amostras fixas em [−1; 1,1]^m (também nunca diminui). `GET /progresso
+  [?desde=g]` = `/estado` + `parametros_espaco` + histórico + frente (só acrescentado ao v1).
+  Testes: `test_progresso.py` (ZDT1: frente = a do Resultado em toda geração, HV igual ao
+  calculado à parte; DTLZ2 4 obj.; 1 objetivo; inviáveis/NaN) e `test_servidor` (rota HTTP).
+- 4f2, janela: `rhino/plugin/Otimiza.UI/JanelaOtimizacao.cs` (Eto Form, sem Grasshopper;
+  quem abre implementa `IAnfitriao`) + modelo sem tela em `Otimiza.Cliente/Configuracao.cs`
+  (`Catalogo` do `/metricas`, `Configuracao` → problema em texto, JSON salvo no .gh,
+  `DeProblema` lê o painel, `DadosGraficos.DeResultadoJson`). Gráficos num WebView (Eto 2.11 do
+  Rhino 8 = WebView2) com `rhino/plugin/web/janela.html` + `graficos.js` + plotly.js 2.35.2
+  local (versionado, MIT, 4,56 MB, SHA-256 conferido com o do jsdelivr). C# → JS:
+  `ExecuteScriptAsync("otimiza.atualizar(json)")` só quando os dados mudam (consulta a cada
+  0,5 s; servidor fora do ar: tenta a cada 3 s com timeout de 0,4 s para não travar). JS → C#:
+  `window.eto.postMessage` (ou o título da página, `DocumentTitleChanged`). Componente:
+  duplo clique/menu abre a janela; config em `Write/Read` (chave `otimiza.janela`); painel
+  `problema` ligado manda; painel `opcoes` sobrescreve nivel/populacao/geracoes/algoritmo
+  (linhas da janela entram antes); Iniciar da janela = `pedidoIniciar` + `ExpireSolution`;
+  Aplicar = `Genoma.Aplicar` num `ScheduleSolution`. `.gha` passa a referenciar Rhino.UI
+  (`RhinoEtoApp.MainWindow` como dono da janela) e copia `web/` para `bin/web/`.
+  Página conferida no navegador do app com dados reais (treliça 1 e 2 obj., DTLZ2 3 obj.):
+  achou e corrigiu gráfico invadindo a tabela (altura fixa de 450 px do plotly) e eixo z
+  preso ao trocar de 2 para 3 objetivos. Testes C#: `test_cliente_cs.py` (catálogo, problema
+  da janela usado na otimização de verdade, ida e volta do JSON, painel → janela, erros,
+  painel opcoes manda, `/progresso` e `resultado.json` convertido = mesma frente).
+  Conferência no Rhino: `rhino/grasshopper/conferir_janela.py` (falta rodar para marcar a 4f2).

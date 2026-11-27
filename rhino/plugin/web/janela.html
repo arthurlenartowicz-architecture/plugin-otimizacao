@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otimiza</title>
+<!-- Gráficos da janela de Otimização (4f2). Carregada pelo WebView do Eto (WebView2 no
+     Windows) a partir de rhino/plugin/bin/web/. plotly.js 2.35.2 local (sem internet).
+     C# → JS: otimiza.atualizar(dados). JS → C#: window.eto.postMessage(texto JSON). -->
+<style>
+  :root {
+    --fundo: #f6f6f6; --painel: #ffffff; --texto: #1f2328; --fraco: #6a737d;
+    --borda: #d0d7de; --destaque: #0b62d6; --sel: #fff3c4;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--fundo); color: var(--texto);
+    font: 13px "Segoe UI", system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header { padding: 8px 12px; background: var(--painel); border-bottom: 1px solid var(--borda);
+    display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+  header b { font-size: 14px; }
+  .fraco { color: var(--fraco); }
+  nav { display: flex; gap: 2px; padding: 6px 12px 0; }
+  nav button { border: 1px solid var(--borda); border-bottom: none; background: #eaeef2;
+    padding: 6px 14px; border-radius: 6px 6px 0 0; cursor: pointer; font: inherit; color: var(--texto); }
+  nav button.ativa { background: var(--painel); font-weight: 600; }
+  #area { flex: 1 1 60%; min-height: 260px; background: var(--painel); margin: 0 12px;
+    border: 1px solid var(--borda); display: flex; flex-direction: column; overflow: hidden; }
+  #controles { padding: 6px 10px; display: flex; gap: 10px; align-items: center; min-height: 34px;
+    border-bottom: 1px solid #eef0f2; }
+  #controles:empty { display: none; }
+  #grafico { flex: 1 1 0; min-height: 0; }
+  #vazio { margin: auto; color: var(--fraco); text-align: center; padding: 24px; }
+  #baixo { flex: 0 0 34%; min-height: 150px; margin: 8px 12px 12px; display: flex; flex-direction: column;
+    background: var(--painel); border: 1px solid var(--borda); }
+  #barra { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border-bottom: 1px solid #eef0f2; }
+  #barra .cresce { flex: 1; }
+  button.acao { background: var(--destaque); color: white; border: none; border-radius: 4px;
+    padding: 6px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.acao:disabled { background: #9aa4ae; cursor: default; }
+  #tabela { overflow: auto; flex: 1; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 3px 8px; border-bottom: 1px solid #eef0f2; text-align: right; white-space: nowrap; }
+  th { position: sticky; top: 0; background: #f0f3f6; font-weight: 600; z-index: 1; }
+  th:first-child, td:first-child { text-align: left; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: #f3f8ff; }
+  tbody tr.sel { background: var(--sel); }
+  .bolinha { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  select { font: inherit; }
+</style>
+</head>
+<body>
+<header>
+  <b id="titulo">Otimização</b>
+  <span id="estado" class="fraco">aguardando dados…</span>
+  <span id="numeros" class="fraco"></span>
+</header>
+<nav id="abas">
+  <button data-aba="conv" class="ativa">Convergência</button>
+  <button data-aba="pareto">Frente de Pareto</button>
+  <button data-aba="paralelas">Coordenadas paralelas</button>
+</nav>
+<div id="area">
+  <div id="controles"></div>
+  <div id="grafico"></div>
+  <div id="vazio">Sem dados ainda: escolha os objetivos à esquerda e aperte <b>Iniciar</b>.</div>
+</div>
+<div id="baixo">
+  <div id="barra">
+    <span id="selecao" class="cresce fraco">Clique numa solução (no gráfico ou na tabela).</span>
+    <button id="aplicar" class="acao" disabled>Aplicar no Grasshopper</button>
+  </div>
+  <div id="tabela"></div>
+</div>
+<script src="plotly.min.js"></script>
+<script src="graficos.js"></script>
+</body>
+</html>

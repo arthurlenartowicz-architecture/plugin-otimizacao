@@ -117,3 +117,31 @@ def test_cliente_cs_contra_servidor(programa, servidor, tmp_path):
     assert dados["info"]["cliente"]["genoma"][0] == {"nome": "largura", "guid": "guid-largura",
                                                      "tipo": "x"}
     assert dados["info"]["tempo_cliente_s_por_variante"] is not None
+
+    # ---- janela de Otimização (4f2): modelo sem tela, /progresso e resultado.json
+    j = rel["janela"]
+    cat = {m["chave"]: m for m in j["catalogo"]}
+    assert cat["sol_luz.da"]["sentido"] == "max" and cat["sol_luz.da"]["unidade"] == "%"
+    assert cat["termico.compacidade"]["unidade"] == "1/m"
+    assert j["problema"] == ["min termico.compacidade", "max termico.volume", "termico.wwr <= 30"]
+    assert pr.problema_de(j["problema"]).restricoes == [("termico.wwr", "<=", 30.0)]
+    assert j["ida_volta"]
+    # do painel: sem sentido = o padrão do catálogo; comentário ignorado; restrição
+    assert j["de_texto"]["objetivos"] == [{"chave": "sol_luz.da", "sentido": "max"},
+                                          {"chave": "sol_luz.ase", "sentido": "min"}]
+    assert j["de_texto"]["restricoes"] == [{"chave": "sol_luz.udi", "operador": ">=", "valor": 50}]
+    assert any("pelo menos um objetivo" in e for e in j["erros_vazia"])
+    assert any("ga é para 1 objetivo" in e for e in j["erros_ga_dois"])
+    assert j["auto"] == ["ga", "nsga2", "nsga3"]
+    assert j["opcoes_populacao"] == 99 and j["opcoes_nivel"] == "rapido"     # o painel manda
+    pg = rel["progresso"]
+    assert pg["estado"] == "fim" and pg["geracoes_registradas"] == 4 and len(pg["historico"]) == 4
+    hv = [h["hipervolume"] for h in pg["historico"]]
+    assert all(b >= a - 1e-12 for a, b in zip(hv, hv[1:]))
+    assert [p_["nome"] for p_ in pg["parametros_espaco"]] == ["largura", "profundidade", "altura", "vidro_sul"]
+    arq = rel["arquivo"]
+    chave = lambda p_: json.dumps(p_, sort_keys=True)          # noqa: E731
+    assert arq["estado"] == "arquivo" and arq["n_frente"] == len(dados["solucoes"])
+    assert {chave(s["parametros"]) for s in arq["frente"]} == {chave(s["parametros"]) for s in pg["frente"]}
+    for s, d in zip(arq["frente"], dados["solucoes"]):         # objetivos na ordem do problema
+        assert s["objetivos"] == [d["objetivos"]["termico.compacidade"], d["objetivos"]["termico.volume"]]
