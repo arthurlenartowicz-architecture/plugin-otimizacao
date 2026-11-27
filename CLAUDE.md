@@ -632,4 +632,11 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
   +0,03% de f*, CMA-ES exato, ambos viáveis. Treliça Pratt, massa com utilização ≤ 100% e
   flecha ≤ L/250 (4,8 cm): GA 400 avaliações 143,5 kg × busca exaustiva (735) 143,2 kg (+0,2%).
   Servidor com 1 objetivo = `otimizar_problema` direto (mesma semente; `test_servidor`).
-  Falta a conferência no Rhino (sala com `max sol_luz.da`) para marcar a 4f1.
+  Conferência no Rhino: `rhino/grasshopper/conferir_1objetivo.py` (monta a definição com
+  Otimiza.gha, `max sol_luz.da`, caso `sala_1obj`, salva em `resultados/`) e
+  `scripts/conferir_1objetivo.py` (lê o resultado.json, reavalia pelo protótipo, compara com a
+  busca aleatória e com a otimização de 3 objetivos). Falta rodar no Rhino para marcar a 4f1.
+- Achado na 4f1: o DA de um projeto depende dos vizinhos de lote (a semente dos raios segue a
+  posição no lote; o mesmo lote repetido dá o mesmo valor). 192 salas, lote 192 × lotes de 48:
+  rápido |dif| média 0,09, p95 0,30, máx 1,6 pontos; padrão 0,02 / 0,05 / 0,56. Na sala de
+  exemplo o DA máximo é fácil (janelas grandes): GA 93,8 × busca aleatória 93,7 com 960.
