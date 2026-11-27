@@ -30,6 +30,10 @@ def test_problema_de_texto():
     assert p.objetivos == ["sol_luz.udi", "sol_luz.ase"]
     assert p.sentidos == {"sol_luz.udi": "max"}
     assert p.restricoes == [("sol_luz.da", ">=", 50.0)]
+    # Panel multilinha do GH: um item com várias linhas (\r\n)
+    q = pr.problema_de(["max sol_luz.da\r\nmax sol_luz.udi\r\nmin sol_luz.ase"])
+    assert q.objetivos == ["sol_luz.da", "sol_luz.udi", "sol_luz.ase"]
+    assert q.sentidos["sol_luz.ase"] == "min"
     with pytest.raises(pr.ErroProtocolo):
         pr.problema_de("sol_luz.da > 50")
     with pytest.raises(pr.ErroProtocolo):

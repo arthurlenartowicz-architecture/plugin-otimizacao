@@ -80,7 +80,9 @@ def problema_de(linhas) -> Problema:
          sol_luz.ase <= 10     restrição (não é objetivo)
     Linhas vazias e começando com # são ignoradas. Aceita também um texto só."""
     if isinstance(linhas, str):
-        linhas = linhas.splitlines()
+        linhas = [linhas]
+    # cada item pode ter várias linhas (Panel multilinha do GH manda um texto só)
+    linhas = [sub for item in linhas for sub in str(item).splitlines()]
     objetivos, sentidos, restricoes = [], {}, []
     for bruta in linhas:
         linha = str(bruta).split("#")[0].strip()
