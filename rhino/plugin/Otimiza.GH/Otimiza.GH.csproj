@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Otimiza.gha: componente Otimizar do Grasshopper (Rhino 8, .NET 8).
+       Compila junto os arquivos do Otimiza.Cliente: um .gha só, sem dll ao lado.
+       Saída em rhino/plugin/bin/ (fora do git). Feche o Rhino antes de recompilar
+       (o Grasshopper trava o .gha aberto). -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Otimiza</AssemblyName>
+    <RootNamespace>Otimiza.GH</RootNamespace>
+    <TargetExt>.gha</TargetExt>
+    <OutputPath>..\bin\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <RhinoDir Condition="'$(RhinoDir)' == ''">C:\Program Files\Rhino 8</RhinoDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Otimiza.Cliente\*.cs" Link="Cliente\%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="RhinoCommon">
+      <HintPath>$(RhinoDir)\System\RhinoCommon.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Eto">
+      <HintPath>$(RhinoDir)\System\Eto.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Grasshopper">
+      <HintPath>$(RhinoDir)\Plug-ins\Grasshopper\Grasshopper.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="GH_IO">
+      <HintPath>$(RhinoDir)\Plug-ins\Grasshopper\GH_IO.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

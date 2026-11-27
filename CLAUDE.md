@@ -69,6 +69,8 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   - [x] 4a · térmico 🟢: compacidade, WWR, ganho solar, UTCI (módulo `termico`)
   - [x] 4b · térmico 🟡: modelo RC multicamadas em lote (cargas, EUI, balanço zero, PPD,
     conforto adaptativo), validado contra o EnergyPlus
+  - [x] 4c · plugin C# (`rhino/plugin/`, Otimiza.gha): componente Otimizar no lugar do
+    `otimizar_gh.py`, mesmo protocolo v1; testado contra o servidor real e no Rhino 8
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
     - [x] carga de resfriamento e aquecimento, kWh/ano 🟡 (modelo RC em lote
       por zona; ganhos solares vêm do `sol_luz`)
@@ -485,3 +487,32 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 - Benchmark 4b (RTX 5070, rápido): 64 variantes, cargas + EUI ~120/s; tudo do RC (cargas,
   EUI, balanço, PPD, adaptativo: duas simulações) ~70/s; com 256 variantes ~200/s e ~110/s
   (a simulação de um ano leva ~0,3 s para qualquer lote: o custo é a sequência de horas).
+- Etapa 4c (2026-11-27), plugin C# (`rhino/plugin/`, ver `rhino/plugin/LEIAME.md`): .NET 8 SDK
+  8.0.428 instalado (winget); sem NuGet (HTTP e System.Text.Json do próprio .NET). Alvo só
+  net8.0(-windows): o Rhino 8.37 roda no .NET 8 (só há os runtimes 8 e 10; nada de net48/net7).
+  `Otimiza.Cliente` (sem Rhino): `ClienteProtocolo` (HttpClient síncrono, sem proxy, conexão
+  mantida; JSON sem escapar o '+' do base64), `Codificacao` (float32/int32 → base64, como o
+  GhPython), `Opcoes` (painel chave = valor) e `Ciclo` = a classe Laco do `otimizar_gh.py`
+  (conectar/iniciar, tarefas, resultados, trabalhador com conferência dos nomes, `/devolver`,
+  parar), com `gerar` e eventos (AoEscrever/AoTerminar/AoEsperar) fornecidos por quem usa.
+  `Otimiza.GH` → `Otimiza.gha` compila os arquivos do Cliente junto (um arquivo só: evita
+  problema de dependência ao lado do .gha carregado por bytes); RhinoCommon, Grasshopper,
+  GH_IO e Eto do Rhino instalado com Private=false. Componente com as mesmas entradas/saídas
+  (GUID c3a1f6d2-…); genoma, captura no SolveInstance, timer Eto de 5 ms com blocos de
+  0,25 s, Esc, vista sem redraw, sliders restaurados e Pareto recarregado no fim;
+  `info.cliente.componente` = "Otimiza.gha <versão>". Pasta do projeto: sobe do .gha (ou do
+  .gh) até o CLAUDE.md; `raiz =` no `opcoes` força. Carregado pelo `GrasshopperDeveloperSettings`
+  (pasta `rhino/plugin/bin`, fora do git); `montar_otimizar_cs.py` monta `otimizar_cs.gh`
+  (o `montar_otimizar.py` com `_USAR_CS`). O `otimizar_gh.py` continua valendo.
+- Teste 4c (`testes/test_cliente_cs.py`, pula sem SDK ou EPW): compila e roda
+  `rhino/plugin/Otimiza.Testes` (console no papel do Rhino) contra o servidor real: base64
+  igual ao do Python; `/avaliar` de caixas em mm com contexto em `fixas` = conta analítica
+  (volume, área, compacidade, WWR, rel 1e-5); otimização 16 × 4 com 1 principal + 2
+  trabalhadores (um para no meio e devolve tarefas, o outro volta a esperar), erro do cliente
+  → inviável, trabalhador com genoma diferente recusado. ~5 s.
+- Conferido no Rhino 8 (2026-11-27, sala de exemplo, DA × UDI × ASE, rápido, NSGA-III 48 × 20):
+  960 avaliações, 957 geradas; GH 12,7 ms/variante (3b: 15,8; −20%: só a captura/conversão
+  saiu do IronPython, a sala ainda é um GhPython), GPU 2,9 ms/variante (3b: 1,3), total
+  20,3 s (3b: 19,2 s). O ganho no GH foi comido pela GPU e pela espera entre gerações; o
+  gargalo segue sendo o recálculo do GH (para acelerar: vários Rhinos, ou a geometria do
+  exemplo em C#).

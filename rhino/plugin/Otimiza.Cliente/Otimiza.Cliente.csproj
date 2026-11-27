@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Protocolo v1 com o servidor Python (sem Rhino): testável fora do Rhino.
+       O Otimiza.gha compila estes mesmos arquivos (um .gha só, sem dll ao lado). -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Otimiza.Cliente</RootNamespace>
+    <OutputPath>..\bin\cliente\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+</Project>

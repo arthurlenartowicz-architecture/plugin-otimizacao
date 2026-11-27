@@ -32,7 +32,10 @@ if not os.path.isfile(os.path.join(RAIZ, "CLAUDE.md")):
     RAIZ = RAIZ_PADRAO
 
 PASTA_GH = os.path.join(RAIZ, "rhino", "grasshopper")
-SAIDA_GH = os.path.join(PASTA_GH, "otimizar.gh")
+# montar_otimizar_cs.py liga _USAR_CS: o Otimizar vem do plugin C# (Otimiza.gha), não do GhPython
+USAR_CS = globals().get("_USAR_CS", False)
+GUID_OTIMIZAR_CS = "c3a1f6d2-8b4e-4a0f-9e57-2d6b1f0a7c93"
+SAIDA_GH = os.path.join(PASTA_GH, "otimizar_cs.gh" if USAR_CS else "otimizar.gh")
 
 LISTA, ITEM = "list", "item"
 OTIMIZAR_IN = ([("genoma", LISTA, "sliders e Value Lists que o otimizador mexe")]
@@ -118,6 +121,16 @@ def ghpython(gh, doc, arquivo, apelido, entradas, saidas, x, y):
     return comp
 
 
+def componente_cs(gh, doc, x, y):
+    comp = gh.Instances.ComponentServer.EmitObject(System.Guid(GUID_OTIMIZAR_CS))
+    if comp is None:
+        raise RuntimeError("Componente Otimizar (C#) não encontrado: carregue o Otimiza.gha "
+                           "(rhino/plugin/LEIAME.md) e reinicie o Rhino.")
+    colocar(doc, comp, x, y)
+    comp.NickName = "Otimizar"
+    return comp
+
+
 def slider(gh, doc, nome, minimo, maximo, casas, valor, x, y):
     s = gh.Kernel.Special.GH_NumberSlider()
     s.Slider.Minimum = System.Decimal(minimo)
@@ -149,7 +162,10 @@ def montar():
     gh.Instances.ActiveCanvas.Document = doc
 
     sala = ghpython(gh, doc, "sala_exemplo.py", "Sala exemplo", SALA_IN, SALA_OUT, 330, 120)
-    otim = ghpython(gh, doc, "otimizar_gh.py", "Otimizar", OTIMIZAR_IN, OTIMIZAR_OUT, 700, 160)
+    if USAR_CS:
+        otim = componente_cs(gh, doc, 700, 160)
+    else:
+        otim = ghpython(gh, doc, "otimizar_gh.py", "Otimizar", OTIMIZAR_IN, OTIMIZAR_OUT, 700, 160)
     s_in = dict((p.NickName, p) for p in sala.Params.Input)
     s_out = dict((p.NickName, p) for p in sala.Params.Output)
     o_in = dict((p.NickName, p) for p in otim.Params.Input)
