@@ -67,12 +67,14 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
     balanço zero; validar contra EnergyPlus via honeybee_energy) → 4c plugin C# (troca só o
     `otimizar_gh.py`, mesmo protocolo v1; precisa do .NET 8 SDK) → 4d carbono/custo → 4e programa.
   - [x] 4a · térmico 🟢: compacidade, WWR, ganho solar, UTCI (módulo `termico`)
+  - [x] 4b · térmico 🟡: modelo RC multicamadas em lote (cargas, EUI, balanço zero, PPD,
+    conforto adaptativo), validado contra o EnergyPlus
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
-    - [ ] carga de resfriamento e aquecimento, kWh/ano 🟡 (modelo RC em lote
+    - [x] carga de resfriamento e aquecimento, kWh/ano 🟡 (modelo RC em lote
       por zona; ganhos solares vêm do `sol_luz`)
-    - [ ] consumo energético total, EUI kWh/m²·ano 🟡 (cargas ÷ COP/eficiência
+    - [x] consumo energético total, EUI kWh/m²·ano 🟡 (cargas ÷ COP/eficiência
       + iluminação usando a autonomia de luz natural do `sol_luz` + equipamentos)
-    - [ ] conforto interno 🟡: graus-hora / horas de desconforto, conforto
+    - [x] conforto interno 🟡: graus-hora / horas de desconforto, conforto
       adaptativo (ASHRAE 55 / EN 16798), PMV/PPD
     - [x] conforto externo, UTCI 🟢 sem o vento: temperatura radiante média a
       partir da radiação do `sol_luz` (motor A) + ar, umidade e vento do EPW.
@@ -80,7 +82,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
     - [x] ganho solar pelas aberturas, W/m² e WWR por orientação 🟢 (radiação
       nos vidros × τ/FS; WWR direto da geometria)
     - [x] compacidade, superfície ÷ volume 🟢 (só geometria)
-    - [ ] balanço energético zero, geração − consumo kWh/ano 🟡 (depende de
+    - [x] balanço energético zero, geração − consumo kWh/ano 🟡 (depende de
       `sol_luz.fv` e de `termico.eui`: exemplo de `depende_de`)
 - [ ] 5. Vento (XLB) + IA substituta
 
@@ -426,3 +428,60 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   7,91 × 7,71. Céu e sol vistos conferidos contra a conta analítica de um muro de 1 km.
 - Benchmark 4a (64 variantes com praça de 40 × 40 m, RTX 5070): geometria ~5000/s,
   ganho solar ~1300/s, UTCI 326/s (rápido, grade 2 m) e 105/s (padrão, grade 1 m).
+- Etapa 4b (2026-11-27), modelo térmico (`modulos/termico/rc.py`, `zona.py`,
+  `conforto_interno.py`). Primeiro tentei a 5R1C da ISO 13790: com uma massa só não dava
+  conta de parede leve por dentro + forro + laje pesada (aquecimento 2–3× o do E+, sala livre
+  1 °C mais fria, oscilação errada) — trocada por um RC multicamadas no espírito da ISO
+  52016-1: uma zona por variante; cada elemento (parede, cobertura, piso no solo, piso
+  interno/adiabático, vidro) com as camadas reais em nós de ≤ 4 cm + faces sem massa; nós de
+  ar e radiante (estrela, h_r ≈ 5,2). Externo: h_e = 4 + 4·v_local + h_r (vento médio do
+  ano na altura, perfil do E+ para o terreno, padrão "cidade" como o HB), sol α·I e onda
+  longa com o céu F_r·h_r·(θ_céu − θ_e) (F_r = F_céu·β do E+: parede 0,35, cobertura 1; h_r
+  hora a hora na média céu–ar). Interno: convecção típica do TARP (parede e piso 2,0; teto
+  1,5 W/m²K). Solo: face externa do piso na temperatura do solo do cabeçalho do EPW (0,5 m,
+  mensal; `Clima.temp_solo` novo). Vidro: um nó (U = 1,688 com películas). Sol pelos vidros
+  (FS × I × fator angular de vidro duplo por Fresnel): transmitido τ = 0,84·FS (razão do
+  Generic Double Pane), o direto cai no piso (α 0,8) e o difuso + refletido vão às faces
+  por área × absortância (gesso 0,5, forro 0,2, concreto 0,8), como o E+; o absorvido no
+  vidro (FS − τ) entra pela face interna da janela. Infiltração ρ·c·vazão (ρ médio pela T e
+  pressão do EPW). Climatização ideal no ar, sem limite. Euler implícito de 1 h; a matriz é
+  constante, então vai para coordenadas modais (√D·M⁻¹·√D simétrica → `eigh`, exato, sem
+  truncar): cada modo evolui sozinho num kernel Warp (uma thread por variante, variante no
+  último eixo); o ano roda 2× (a 1ª aquece). 36 nós.
+- Radiação horária nas superfícies: `motor_a.ceu_direcional_horario` (céu + solo
+  lambertiano por hora; `componente="direta"` só o sol) e `irradiancia_agregada` (Σ área·I
+  por variante × tipo antes de multiplicar pelas horas: o custo não cresce com sensores ×
+  horas).
+- Programa padrão (`rc.Programa`, = caso de validação): pessoas 0,0565/m² × 120 W sensível
+  (30% radiante), iluminação 10 W/m² (57% radiante), equipamentos 10 W/m² (50%), seg–sex 8–18 h
+  (ano 2017; iluminação/equipamentos 5% fora do horário), infiltração 0,5 trocas/h, termostato
+  20/24 °C sempre, COP 3/3. Construções = genéricas do HB (camadas em `CONSTRUCOES`).
+  EUI = (aquec/COP + resfr/COP + iluminação + equipamentos)/área de piso; a iluminação desliga
+  nas horas ocupadas na fração do `sol_luz.da` médio (vale também como ganho interno).
+  balanco_zero = sol_luz.fv − consumo.
+- Contrato: `Modulo.precisa(metricas)` novo (métricas das dependências que as pedidas usam;
+  None = todas, o comportamento antigo). O motor só roda dependências necessárias: pedir
+  `termico.compacidade` não roda o sol_luz; as métricas RC pedem só `sol_luz.da` (e `fv`).
+- Conforto interno: adaptativo ASHRAE 55 80% como o padrão do LB (prevalente = média mensal
+  externa limitada a 10–33,5; neutra 0,31·T + 17,8; ±3,5 °C), em evolução livre, horas
+  ocupadas: `conforto_adaptativo` (%), `graus_hora_calor`/`frio` (°C·h). PPD de Fanger (a
+  iteração do ladybug_comfort, em lote) no climatizado, horas ocupadas, v 0,1 m/s, met 1,1,
+  roupa de Schiavon pela temperatura das 6 h, UR interna com a pressão de vapor externa.
+  EN 16798 ficou para depois.
+- Validação 4b (`scripts/gerar_ref_rc.py` com o Python do Ladybug Tools: HB Model → IDF →
+  EnergyPlus do OpenStudio 3.10, sem Rhino; gabarito `testes/referencias/rc/eplus_rc.json`).
+  Sala 6×8×3 m, Curitiba, cargas ideais 20/24 °C. A (janela N 40%, piso adiabático):
+  aquecimento 252 × E+ 229 kWh (+10%), resfriamento 2437 × 2407 (+1,3%), total +2,0%.
+  B (N 40% + O 30%, piso no solo com a temperatura do solo do EPW): aquecimento 361 × 302
+  (+19%), resfriamento 2158 × 2180 (−1,0%), total +1,5%. Evolução livre (operativa hora a
+  hora): viés −0,17 / −0,28 °C, rms 0,49 / 0,45 °C, amplitude diária 5,94 × 6,07 /
+  5,40 × 5,38. Conforto adaptativo (ocupadas) 27,6 × 27,5% / 44,6 × 41,7%. Critérios dos
+  testes: resfriamento e total ±10%; aquecimento ±25% e ≤ 3% da carga total (é ~10% da carga
+  em Curitiba; o plano previa ±15% em todas — o aquecimento da B fica acima, decisão a rever
+  se o TCC usar clima frio); livre viés < 0,4 e rms < 0,8 °C; conforto ±5 pontos.
+  Adaptativo e PMV/PPD contra o ladybug_comfort com as mesmas entradas: iguais (PMV < 1e-6).
+  O ladybug.sql já converte J → kWh. O HB precisa de `heating_limit=no_limit` e sizing
+  desligado (sem dias de projeto).
+- Benchmark 4b (RTX 5070, rápido): 64 variantes, cargas + EUI ~120/s; tudo do RC (cargas,
+  EUI, balanço, PPD, adaptativo: duas simulações) ~70/s; com 256 variantes ~200/s e ~110/s
+  (a simulação de um ano leva ~0,3 s para qualquer lote: o custo é a sequência de horas).

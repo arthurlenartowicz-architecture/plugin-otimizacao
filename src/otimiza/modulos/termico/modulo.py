@@ -5,7 +5,10 @@
 - ganho solar pelos vidros: radiação do motor A nos vidros × fator solar (FS) da variante
 - conforto externo (UTCI) em pessoas sobre o entorno (conforto_externo.py)
 
-O modelo RC (cargas, EUI, conforto interno, balanço zero) vem na 4b.
+- modelo RC multicamadas (rc.py, 4b): cargas de aquecimento/resfriamento, EUI, consumo,
+  balanço energético zero (com sol_luz.fv), PPD (climatizado) e conforto adaptativo e
+  graus-hora (evolução livre). A iluminação desliga nas horas ocupadas na fração do DA
+  médio do sol_luz (sensor de luz natural liga/desliga).
 """
 from __future__ import annotations
 
@@ -14,6 +17,8 @@ import torch
 from otimiza.modulos.sol_luz import motor_a
 from otimiza.modulos.sol_luz.modulo import DESLOC_EXTERNO, NIVEIS, SOL_LUZ
 from otimiza.modulos.termico import conforto_externo as ce
+from otimiza.modulos.termico import conforto_interno as ci
+from otimiza.modulos.termico import rc, zona
 from otimiza.modulos.termico.envoltoria import ORIENTACOES, envoltoria, orientacao
 from otimiza.nucleo.cena import CenaLote, media_por_variante, soma_por_variante
 from otimiza.nucleo.ceu import criar_ceu
@@ -26,11 +31,15 @@ LOTE_PESSOAS = 2048
 _GEO = {"compacidade", "area_envoltoria", "volume", "wwr"} | {f"wwr_{o}" for o in ORIENTACOES}
 _GANHO = {"ganho_solar", "ganho_solar_piso"} | {f"ganho_solar_{o}" for o in ORIENTACOES}
 _UTCI = {"utci_conforto", "utci_calor", "utci_frio"}
+_RC_CLIM = {"carga_aquecimento", "carga_resfriamento", "carga_termica", "eui", "consumo",
+            "balanco_zero", "ppd"}
+_RC_LIVRE = {"conforto_adaptativo", "graus_hora_calor", "graus_hora_frio"}
+PROGRAMA = rc.Programa()
 
 
 class Termico(Modulo):
     nome = "termico"
-    depende_de = ()
+    depende_de = ("sol_luz",)
     metricas = {
         "compacidade": Metrica("1/m", "min", "área da envoltória ÷ volume"),
         "area_envoltoria": Metrica("m²", "min", "fachadas + vidros + cobertura + base"),
@@ -45,7 +54,26 @@ class Termico(Modulo):
         "utci_conforto": Metrica("%", "max", "% das horas do ano com UTCI 9–26 °C no entorno"),
         "utci_calor": Metrica("%", "min", "% das horas do ano com UTCI > 26 °C no entorno"),
         "utci_frio": Metrica("%", "min", "% das horas do ano com UTCI < 9 °C no entorno"),
+        "carga_aquecimento": Metrica("kWh/m²·ano", "min", "carga térmica de aquecimento (ideal, sensível)"),
+        "carga_resfriamento": Metrica("kWh/m²·ano", "min", "carga térmica de resfriamento (ideal, sensível)"),
+        "carga_termica": Metrica("kWh/m²·ano", "min", "aquecimento + resfriamento"),
+        "eui": Metrica("kWh/m²·ano", "min", "consumo: cargas ÷ COP + iluminação + equipamentos"),
+        "consumo": Metrica("kWh/ano", "min", "consumo total (EUI × área de piso)"),
+        "balanco_zero": Metrica("kWh/ano", "max", "geração FV (sol_luz.fv) − consumo"),
+        "ppd": Metrica("%", "min", "PPD médio nas horas ocupadas (climatizado)"),
+        "conforto_adaptativo": Metrica("%", "max", "% das horas ocupadas no conforto adaptativo "
+                                       "ASHRAE 55 (80%), sem climatização"),
+        "graus_hora_calor": Metrica("°C·h", "min", "graus-hora acima da faixa adaptativa (ocupadas)"),
+        "graus_hora_frio": Metrica("°C·h", "min", "graus-hora abaixo da faixa adaptativa (ocupadas)"),
     }
+
+    def precisa(self, metricas):
+        r = {}
+        if metricas & (_RC_CLIM | _RC_LIVRE):
+            r["sol_luz"] = {"da"}
+        if "balanco_zero" in metricas:
+            r.setdefault("sol_luz", set()).add("fv")
+        return r
 
     def avaliar(self, cena: CenaLote, cache, metricas: set[str], nivel: str = "padrao"):
         cfg = NIVEIS[nivel]
@@ -56,7 +84,50 @@ class Termico(Modulo):
             r.update(self._ganho(cena, cache, cfg, r))
         if metricas & _UTCI:
             r.update(self._utci(cena, cache, cfg))
+        if metricas & (_RC_CLIM | _RC_LIVRE):
+            r.update(self._rc(cena, cache, cfg, metricas))
         return {m: r[m].to(cena.device) for m in metricas}
+
+    # ------------------------------------------------------------------ modelo RC
+    def _rc(self, cena, cache, cfg, metricas, programa: rc.Programa = PROGRAMA):
+        dev = cena.device
+        geo = zona.geometria_rc(cena)
+        irr = zona.irradiancias(cena, cache, cfg)
+        da = cache.resultados.get("sol_luz.da")
+        fator_luz = None if da is None else torch.nan_to_num(da.double().cpu(), nan=0.0) / 100
+        z = rc.montar_zonas(geo, cena.clima, programa, irr, fator_luz, device=dev)
+        h = z.u_com.shape[1]
+        aq = torch.full((h,), programa.aquecimento, dtype=torch.float64, device=dev)
+        rf = torch.full((h,), programa.resfriamento, dtype=torch.float64, device=dev)
+        af = z.area_piso.clamp(min=1e-9)
+        r = {}
+        if metricas & _RC_CLIM:
+            s = rc.simular(z, aq, rf, True)
+            e_aq = s["phi_hc"].clamp(min=0).sum(1) / 1000      # kWh/ano
+            e_rf = -s["phi_hc"].clamp(max=0).sum(1) / 1000
+            luz = z.info["luz_w"].sum(1) / 1000
+            equip = z.info["equip_w"].sum(1) / 1000
+            consumo = e_aq / programa.cop_aquecimento + e_rf / programa.cop_resfriamento + luz + equip
+            r.update(carga_aquecimento=e_aq / af, carga_resfriamento=e_rf / af,
+                     carga_termica=(e_aq + e_rf) / af, eui=consumo / af, consumo=consumo)
+            if "balanco_zero" in metricas:
+                fv = torch.nan_to_num(cache.resultados["sol_luz.fv"].double().to(dev), nan=0.0)
+                r["balanco_zero"] = fv - consumo
+            if "ppd" in metricas:
+                occ = rc.ocupacao(programa).bool().to(dev)
+                ta = s["t_ar"][:, occ]
+                tr = 2 * s["t_op"][:, occ] - ta
+                rh = ci.umidade_interna(cena.clima, s["t_ar"])[:, occ]
+                clo = ci.clo_horario(cena.clima).to(dev)[occ][None, :]
+                _, ppd = ci.pmv_ppd(ta, tr, 0.1, rh, 1.1, clo)
+                r["ppd"] = ppd.mean(1)
+        if metricas & _RC_LIVRE:
+            s = rc.simular(z, aq, rf, False)
+            neutra = ci.neutra_ashrae55(ci.prevalente_mensal(cena.clima))
+            a = ci.adaptativo(s["t_op"], neutra, rc.ocupacao(programa))
+            r.update(conforto_adaptativo=a["conforto"], graus_hora_calor=a["calor"],
+                     graus_hora_frio=a["frio"])
+        return r
 
     # ------------------------------------------------------------------ geometria
     def _geometria(self, cena):

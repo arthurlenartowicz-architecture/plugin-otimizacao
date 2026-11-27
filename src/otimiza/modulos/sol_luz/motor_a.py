@@ -102,3 +102,67 @@ def fotovoltaico(radiacao_kwh_m2, areas_m2, eficiencia: float = 0.20, perdas: fl
     Sem temperatura nem ângulo de incidência; serve para comparar variantes.
     """
     return radiacao_kwh_m2 * areas_m2.to(radiacao_kwh_m2) * eficiencia * (1 - perdas)
+
+
+@dataclass
+class CeuHorario:
+    vetores: torch.Tensor  # (D, 3) direções (céu e solo)
+    energia: torch.Tensor  # (D, H) W/m² médio na hora vindo de cada direção (L · Ω)
+
+
+def ceu_direcional_horario(matriz: MatrizCeu, refletancia_solo: float = 0.2,
+                           componente: str = "total") -> CeuHorario:
+    """Como `ceu_direcional`, mas hora a hora (para o modelo térmico). Solo lambertiano:
+    E_p(h) = ρ · G_horiz(h) · Ω_p / π. componente="direta": só o sol (sem céu difuso nem solo)."""
+    if componente == "direta":
+        L, refletancia_solo = matriz.direta, 0.0
+    else:
+        L = matriz.total
+    ceu = matriz.ceu
+    om = ceu.angulo_solido.to(L)
+    v = ceu.vetores_raio.to(L)
+    e_ceu = L * om[:, None]                        # (P, H) W/m²
+    if refletancia_solo <= 0:
+        return CeuHorario(v, e_ceu)
+    g = (e_ceu * v[:, 2:3]).sum(dim=0)             # (H,) global horizontal
+    e_solo = refletancia_solo * g[None, :] * om[:, None] / math.pi
+    v_solo = v * torch.tensor([1.0, 1.0, -1.0], dtype=v.dtype, device=v.device)
+    return CeuHorario(torch.cat([v, v_solo]), torch.cat([e_ceu, e_solo]))
+
+
+def irradiancia_agregada(cena: Cena, pontos, normais, pesos, grupo, n_grupos: int, ceu: CeuHorario,
+                         variante=None, fator_angular=None) -> torch.Tensor:
+    """(G, H) Σ_s peso_s · E_s(h) por grupo (ex.: variante × tipo de superfície), em W se o
+    peso for a área. E_s(h) = Σ_d visível · cos⁺ · f(cos) · E_d(h). Agrega antes de multiplicar
+    pelas horas, então o custo não cresce com sensores × horas.
+    fator_angular: (S,) bool — sensores em que se aplica f(cos) = `fs_relativo` (vidros)."""
+    dev = cena.device
+    v = ceu.vetores.to(device=dev, dtype=torch.float32)
+    w = torch.zeros(n_grupos, v.shape[0], dtype=torch.float64, device=dev)
+    for i in range(0, pontos.shape[0], LOTE_SENSORES):
+        sl = slice(i, i + LOTE_SENSORES)
+        var = variante[sl] if isinstance(variante, torch.Tensor) else variante
+        n = normais[sl].to(device=dev, dtype=torch.float32)
+        vis = cena.visibilidade(pontos[sl], v, variante=var)
+        c = (n @ v.T).clamp(min=0)
+        peso = c * vis
+        if fator_angular is not None:
+            fa = fator_angular[sl].to(dev)
+            peso = torch.where(fa[:, None], peso * fs_relativo(c), peso)
+        w.index_add_(0, grupo[sl].to(dev).long(), peso.double() * pesos[sl].to(device=dev, dtype=torch.float64)[:, None])
+    return w @ ceu.energia.to(device=dev, dtype=torch.float64)
+
+
+def fs_relativo(cos_i: torch.Tensor, n: float = 1.52) -> torch.Tensor:
+    """Transmitância relativa de um vidro duplo (sem absorção) com o ângulo: Fresnel
+    não polarizado com reflexões múltiplas, normalizada para 1 na incidência normal."""
+    def duplo(c):
+        c = c.clamp(1e-6, 1.0)
+        s = torch.sqrt((1 - c ** 2).clamp(min=0)) / n
+        ct = torch.sqrt(1 - s ** 2)
+        t = 0.0
+        for r in (((c - n * ct) / (c + n * ct)) ** 2, ((ct - n * c) / (ct + n * c)) ** 2):
+            tp, rp = (1 - r) / (1 + r), 2 * r / (1 + r)   # placa
+            t = t + 0.5 * tp ** 2 / (1 - rp ** 2)          # duas placas
+        return t
+    return duplo(cos_i) / duplo(torch.ones_like(cos_i))

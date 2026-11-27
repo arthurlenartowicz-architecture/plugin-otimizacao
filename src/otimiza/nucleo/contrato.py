@@ -7,7 +7,8 @@ Todo módulo declara:
 e implementa
   avaliar(cena, cache, metricas, nivel) -> {nome_metrica: Tensor (V,)}
 com um valor por variante. Só as métricas pedidas precisam ser calculadas.
-Métricas de outros módulos chegam em `cache.resultados["modulo.metrica"]`.
+Métricas de outros módulos chegam em `cache.resultados["modulo.metrica"]`; `precisa` diz
+quais (o padrão é todas as das dependências).
 """
 from __future__ import annotations
 
@@ -38,6 +39,11 @@ class Modulo(ABC):
     @abstractmethod
     def avaliar(self, cena, cache, metricas: set[str], nivel: str = "padrao") -> dict[str, torch.Tensor]:
         ...
+
+    def precisa(self, metricas: set[str]) -> dict[str, set[str]] | None:
+        """Métricas das dependências que as `metricas` pedidas usam ({módulo: {métricas}}).
+        None = todas as métricas de cada módulo em `depende_de` (o padrão)."""
+        return None
 
 
 _REGISTRO: dict[str, Modulo] = {}

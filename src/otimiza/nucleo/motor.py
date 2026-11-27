@@ -64,8 +64,21 @@ def avaliar(cena, chaves: list[str], nivel: str = "padrao", cache: Cache | None 
         if met not in modulo(m).metricas:
             raise KeyError(f"{m!r} não tem a métrica {met!r} (tem: {sorted(modulo(m).metricas)})")
         pedidas.setdefault(m, set()).add(met)
+    # métricas das dependências: as que o módulo declara usar (precisa) ou todas (padrão)
+    fila = list(pedidas)
+    while fila:
+        nome = fila.pop()
+        req = modulo(nome).precisa(set(pedidas[nome]))
+        if req is None:
+            req = {d: set(modulo(d).metricas) for d in modulo(nome).depende_de}
+        for dep, mets in req.items():
+            if not mets <= pedidas.get(dep, set()):
+                pedidas.setdefault(dep, set()).update(mets)
+                fila.append(dep)
     for nome in ordem_de_execucao(set(pedidas)):
-        mets = pedidas.get(nome) or set(modulo(nome).metricas)  # dependência: calcula tudo
+        if nome not in pedidas:   # dependência de que nenhuma métrica pedida precisa
+            continue
+        mets = pedidas[nome]
         saida = modulo(nome).avaliar(cena, cache, mets, nivel)
         for met, valor in saida.items():
             if valor.shape != (cena.n,):

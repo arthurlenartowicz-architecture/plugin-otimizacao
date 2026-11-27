@@ -54,6 +54,7 @@ class Clima:
     dia: torch.Tensor   # (8760,) int64
     hora: torch.Tensor  # (8760,) int64, 1..24 = fim do intervalo
     dados: dict[str, torch.Tensor]  # cada um (8760,) float64
+    temp_solo: torch.Tensor | None = None  # (12,) °C por mês, 1ª profundidade do cabeçalho
 
     def __getitem__(self, nome: str) -> torch.Tensor:
         return self.dados[nome]
@@ -106,4 +107,17 @@ def ler_epw(caminho: str | Path) -> Clima:
         raise ValueError(f"{caminho.name}: horas fora do intervalo 1..24.")
 
     dados = {nome: valores[:, j] for j, nome in enumerate(CAMPOS)}
-    return Clima(local=local, mes=tempo[:, 0], dia=tempo[:, 1], hora=hora, dados=dados)
+    return Clima(local=local, mes=tempo[:, 0], dia=tempo[:, 1], hora=hora, dados=dados,
+                 temp_solo=_temp_solo(linhas[:LINHAS_CABECALHO]))
+
+
+def _temp_solo(cabecalho: list[str]) -> torch.Tensor | None:
+    """GROUND TEMPERATURES,n,prof,cond,dens,calor,12 meses,...: a primeira profundidade."""
+    for l in cabecalho:
+        c = l.split(",")
+        if c[0].strip().upper() == "GROUND TEMPERATURES" and len(c) >= 18 and int(c[1] or 0) > 0:
+            try:
+                return torch.tensor([float(x) for x in c[6:18]], dtype=torch.float64)
+            except ValueError:
+                return None
+    return None
