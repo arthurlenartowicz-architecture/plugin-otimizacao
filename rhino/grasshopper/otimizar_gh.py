@@ -409,6 +409,10 @@ class Laco(object):
         self.log.append(txt)
         self.log = self.log[-30:]
         Rhino.RhinoApp.WriteLine(u"[Otimizar] " + txt)
+        if not self.capturando and self.doc is not None:   # atualiza o painel de log
+            comp = self.comp
+            self.doc.ScheduleSolution(
+                50, gh.Kernel.GH_Document.GH_ScheduleDelegate(lambda d: comp.ExpireSolution(False)))
 
     # -- interface
     def mensagem(self, txt):
@@ -516,7 +520,7 @@ class Laco(object):
                 return self._terminou(r)
             self.fila = list(r.get("tarefas") or [])
             if not self.fila:                 # GPU avaliando: espera sem ocupar a interface
-                self.t_espera = time.time() + 0.1
+                self.t_espera = time.time() + 0.02   # GPU leva ~65 ms/geração; consulta ~1 ms
                 self.mensagem(self.progresso())
                 return
         while self.fila and time.time() < t_fim:

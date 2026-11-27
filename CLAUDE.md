@@ -375,5 +375,11 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   índice` (resposta de otimização antiga é ignorada), `POST /devolver` (trabalhador que
   para devolve as não feitas na hora; senão voltam em 120 s). `lote` padrão 16 → 4 (com
   16 e população 48, dois Rhinos ficavam 32/16). Testado sem Rhino (`test_devolver_e_
-  rodada_antiga`); falta conferir com dois Rhinos. Esc é global (GetAsyncKeyState):
-  para todos; o botão `parar` para um só.
+  rodada_antiga`). Esc é global (GetAsyncKeyState): para todos; o botão `parar` para um só.
+- Conferido com dois Rhinos (2026-11-27, sala 48 × 20): 12,7 s contra 19,2 s só com o A
+  (1,5×); A gerou 516, B 444. Perdas: espera de 0,1 s por consulta enquanto a GPU avalia
+  (~65 ms/geração) → baixada para 0,02 s; o resto é a barreira de cada geração (todos
+  esperam a GPU e o último lote). Na 1ª tentativa o B não entrou e não deixou pista
+  (provavelmente servidor/código antigo ainda carregado); com o diagnóstico ("Trabalhador
+  vê: …" e contador na mensagem) entrou normalmente. O log do componente agora se
+  atualiza quando o laço escreve (ScheduleSolution → ExpireSolution).
