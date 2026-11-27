@@ -60,8 +60,8 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   - [x] 2b · Validação contra o Karamba3D 3.1 (pórtico espacial e treliça
     espacial): deslocamentos, rotações, energia e esforços com erro ~1e-13.
 - [x] 3. Otimizador + Pareto no Rhino → MVP do TCC
-  - [ ] 3b · Parâmetros e geometria do Grasshopper (servidor + componente Otimizar);
-    falta conferir no Rhino (`avaliar` + `test_gh.py`, tempo por variante no GH)
+  - [x] 3b · Parâmetros e geometria do Grasshopper (servidor + componente Otimizar);
+    conferido no Rhino 8 (validação + otimização). Falta confirmar o `aplicar` do Pareto
 - [ ] 4. Plugin C# completo + térmico, carbono/custo, programa
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
     - [ ] carga de resfriamento e aquecimento, kWh/ano 🟡 (modelo RC em lote
@@ -359,3 +359,8 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   os sensores caem em outros lugares. Por isso o teste compara no validação e o
   `minima` do componente liga `SimplePlanes`. Malhar + converter a sala no GH: ~1 ms.
   Gabarito em `testes/referencias/gh/variante_sala_gh.json` (versionado).
+- Otimização pelo GH (2026-11-27, Rhino 8, sala de exemplo, 5 sliders, DA × UDI × ASE,
+  rápido, NSGA-III 48 × 20): 960 avaliações em 19,2 s, 959 geradas no GH (1 do cache).
+  GH 15,8 ms/variante (sliders → NewSolution → malha → base64) = 79% do tempo; GPU
+  1,3 ms/variante = 6%; o resto é HTTP e espera do timer. O gargalo é o recálculo do GH,
+  como previsto: para acelerar, vários Rhinos/Compute na mesma fila (protocolo pronto).
