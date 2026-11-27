@@ -19,7 +19,7 @@ Ciclo: Rhino (parâmetros) → núcleo → módulos → otimizador → aplica so
   categóricos), cache e resolução de dependências entre módulos
 - `modulos/`: um por tema, todos com o mesmo contrato
   (sol_luz, termico, vento, estrutura, acustica, carbono_custo, programa)
-- `otimizacao/`: NSGA-II (2 objetivos), NSGA-III/RVEA (3 ou mais),
+- `otimizacao/`: GA ou CMA-ES (1 objetivo), NSGA-II (2), NSGA-III/RVEA (3 ou mais),
   coordenadas paralelas, clusters do Pareto
 - `ia/`: modelos substitutos (PhysicsNeMo), usados só onde a física é cara
 - `rhino/`: plugin C# (painel no Rhino, componentes do Grasshopper, leitura da
@@ -615,3 +615,21 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
   entra como 4f. Otimização com 1 objetivo usa GA/CMA-ES. Dois modos de gerar
   variantes: via GH (o atual) e parâmetros nativos gerados pelo motor. Interface em
   Eto.Forms. Marcar entorno/edifício é só etiqueta: nunca altera a geometria.
+- 4f1 (2026-11-27): `auto` 1 objetivo → GA (`pymoo` GA: mesmos SBX + mutação polinomial e
+  reparo dos discretos do NSGA-II; torneio e sobrevivência "viável primeiro, depois menor F").
+  `algoritmo = cmaes` (pymoo CMAES sobre o `cma` 4.6.0): recusa inteiro/categórico; lote =
+  população (1º lote = amostra LHS do mesmo tamanho, x0 = o melhor), sigma 0,25 do intervalo,
+  tolfun/tolx 1e-11 (pode parar antes das gerações pedidas). O CMAES do pymoo ignora o Repair e
+  põe os inviáveis em inf (se todos forem inviáveis ele fica cego): no nosso problema o CMA-ES
+  vê F = 1e13 + violação nos inviáveis, sem restrição para o pymoo (só a ordem importa, então
+  equivale ao "viável primeiro" do GA); o registro guarda F e violação reais. ga/cmaes com 2+
+  objetivos → erro. `Resultado.melhores(n)`: n melhores viáveis distintos; com 1 objetivo o
+  `exportar` grava os 20 melhores (a frente seria só o melhor), em ordem.
+- Validação 4f1 (`testes/test_mono_objetivo.py`, ótimos deslocados para x* = 1,234 em
+  [−5,12; 5,12]): esfera 10D (100 × 200) GA f = 1,4e-5, CMA-ES 5e-14 (13 mil avaliações, parou
+  pela tolerância); Rastrigin 2D os dois no ótimo global; 5D (100 × 100, 3 sementes) GA
+  ≤ 0,001 e CMA-ES 0, aleatória com o mesmo orçamento 17,1; restrição ativa (x0 ≥ 3) GA
+  +0,03% de f*, CMA-ES exato, ambos viáveis. Treliça Pratt, massa com utilização ≤ 100% e
+  flecha ≤ L/250 (4,8 cm): GA 400 avaliações 143,5 kg × busca exaustiva (735) 143,2 kg (+0,2%).
+  Servidor com 1 objetivo = `otimizar_problema` direto (mesma semente; `test_servidor`).
+  Falta a conferência no Rhino (sala com `max sol_luz.da`) para marcar a 4f1.

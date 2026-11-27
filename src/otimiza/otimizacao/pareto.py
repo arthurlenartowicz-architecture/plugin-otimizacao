@@ -125,7 +125,8 @@ def exportar(resultado, pasta: str, gerador=None, k_clusters: int = 5,
     Soluções em ordem do 1º objetivo. Frente com mais de `max_solucoes` pontos: fica
     uma amostra espalhada (igualmente espaçada nessa ordem), para o arquivo não crescer."""
     os.makedirs(pasta, exist_ok=True)
-    idx = resultado.frente()
+    # 1 objetivo: a "frente" é só o melhor; exporta os 20 melhores distintos para comparar
+    idx = resultado.frente() if len(resultado.nomes) > 1 else resultado.melhores(20)
     idx = idx[np.argsort(resultado.F[idx, 0], kind="stable")]   # slider percorre a frente
     if len(idx) > max_solucoes:
         idx = idx[np.unique(np.linspace(0, len(idx) - 1, max_solucoes).round().astype(int))]

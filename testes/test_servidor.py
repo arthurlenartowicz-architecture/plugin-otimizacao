@@ -189,19 +189,23 @@ def test_http_trelica_dois_clientes(servidor, tmp_path):
     assert dados["info"]["tempo_cliente_s_por_variante"] is not None
 
 
-def test_mesmo_resultado_que_otimizar_direto(tmp_path):
+@pytest.mark.parametrize("problema,alg", [
+    (PROBLEMA_TRELICA, "nsga2"),
+    (["estrutura.massa", "estrutura.utilizacao <= 100"], "ga")])     # 1 objetivo (4f1)
+def test_mesmo_resultado_que_otimizar_direto(tmp_path, problema, alg):
     """Pelo servidor (com cache e fila) = `otimizar_problema` direto, mesma semente."""
     import otimiza.modulos.estrutura  # noqa: F401
     from otimiza.otimizacao import otimizar_problema
     from otimiza.nucleo.parametros import Categorico
     esp = Espaco([Continuo("altura", 0.6, 3.0, 2), Inteiro("n_paineis", 4, 10),
                   Categorico("secao", tuple(TUBOS))])
-    pb = pr.problema_de(PROBLEMA_TRELICA)
+    pb = pr.problema_de(problema)
     direto = otimizar_problema(esp, trelica_pratt_de, pb, "padrao", populacao=16, geracoes=5,
                                semente=2)
     sv = Servico()
-    otim = sv.iniciar(dict(parametros=ESPACO_TRELICA, problema=PROBLEMA_TRELICA, nivel="padrao",
+    otim = sv.iniciar(dict(parametros=ESPACO_TRELICA, problema=problema, nivel="padrao",
                            populacao=16, geracoes=5, semente=2, saida=str(tmp_path))) and sv.otim
+    assert otim.sessao.nome_alg == alg
     while True:
         r = otim.tarefas()
         if r["estado"] == "fim":
@@ -215,6 +219,7 @@ def test_mesmo_resultado_que_otimizar_direto(tmp_path):
     via = otim.sessao.resultado()
     assert via.parametros == direto.parametros
     assert np.allclose(via.F, direto.F, rtol=1e-9)
+    assert (tmp_path / "resultado.json").is_file()
     sv.encerrar()
 
 

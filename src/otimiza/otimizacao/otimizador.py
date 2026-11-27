@@ -1,6 +1,7 @@
 """Otimização multiobjetivo com a população inteira avaliada em lote.
 
-Algoritmos (pymoo): NSGA-II para 2 objetivos; NSGA-III (ou RVEA) para 3 ou
+Algoritmos (pymoo): GA para 1 objetivo (CMA-ES opcional, só com parâmetros
+contínuos); NSGA-II para 2 objetivos; NSGA-III (ou RVEA) para 3 ou
 mais, guiados por direções de referência (com 3 objetivos o NSGA-II espalha
 mal a frente: IGD 0,077 contra 0,009 do NSGA-III no DTLZ2). O pymoo cuida da seleção, cruzamento
 (SBX) e mutação (polinomial); a avaliação de cada geração é uma só chamada ao
@@ -22,10 +23,11 @@ import numpy as np
 from pymoo.core.problem import Problem
 from pymoo.core.repair import Repair
 
-from otimiza.nucleo.parametros import Espaco, cena_de
+from otimiza.nucleo.parametros import Continuo, Espaco, cena_de
 
 VIOLACAO_NAN = 1e6   # violação dada a variantes que deram NaN/inf
 F_NAN = 1e12         # valor dos objetivos dessas variantes (finito, para o pymoo)
+F_PENAL = 1e13       # CMA-ES: inviável vira F_PENAL + violação (pior que qualquer viável)
 
 # avaliador(lista de dicts de parâmetros) -> (F (N, m) para minimizar, violação (N,))
 Avaliador = Callable[[list[dict]], tuple[np.ndarray, np.ndarray]]
@@ -58,18 +60,24 @@ class Resultado:
     def frente(self) -> np.ndarray:
         """Índices (no histórico) das soluções viáveis não dominadas, sem repetidas."""
         from otimiza.otimizacao.pareto import nao_dominados
-        idx = np.flatnonzero(self.viavel)
-        if idx.size == 0:
-            return idx
-        # remove parâmetros repetidos (mesmo projeto avaliado mais de uma vez)
+        unicos = self._viaveis_unicos()
+        return unicos[nao_dominados(self.F[unicos])] if unicos.size else unicos
+
+    def melhores(self, n: int = 20) -> np.ndarray:
+        """1 objetivo: índices dos `n` melhores projetos viáveis distintos, do melhor ao pior
+        (a "frente" com 1 objetivo é só o melhor; isto dá alternativas para comparar)."""
+        unicos = self._viaveis_unicos()
+        return unicos[np.argsort(self.F[unicos, 0], kind="stable")[:n]]
+
+    def _viaveis_unicos(self) -> np.ndarray:
+        """Viáveis sem parâmetros repetidos (mesmo projeto avaliado mais de uma vez)."""
         vistos, unicos = set(), []
-        for i in idx:
+        for i in np.flatnonzero(self.viavel):
             chave = tuple(sorted((k, str(v)) for k, v in self.parametros[i].items()))
             if chave not in vistos:
                 vistos.add(chave)
                 unicos.append(i)
-        unicos = np.array(unicos)
-        return unicos[nao_dominados(self.F[unicos])]
+        return np.array(unicos, dtype=int)
 
 
 class _Arredondar(Repair):
@@ -82,9 +90,13 @@ class _Arredondar(Repair):
 
 
 class _ProblemaLote(Problem):
-    def __init__(self, espaco: Espaco, avaliador: Avaliador, n_obj: int):
-        super().__init__(n_var=espaco.n, n_obj=n_obj, n_ieq_constr=1, xl=0.0, xu=1.0)
-        self.espaco, self.avaliador = espaco, avaliador
+    def __init__(self, espaco: Espaco, avaliador: Avaliador, n_obj: int, penalizar: bool = False):
+        # penalizar (CMA-ES): sem restrição para o pymoo; o algoritmo vê F_PENAL + violação
+        # nos inviáveis. Como o CMA-ES só usa a ordem dos valores, é o mesmo que "viável
+        # primeiro, depois menor violação" do GA (o pymoo do CMA-ES poria todos em inf)
+        super().__init__(n_var=espaco.n, n_obj=n_obj, n_ieq_constr=0 if penalizar else 1,
+                         xl=0.0, xu=1.0)
+        self.espaco, self.avaliador, self.penalizar = espaco, avaliador, penalizar
         self.registro: list[tuple[list[dict], np.ndarray, np.ndarray]] = []
 
     def _evaluate(self, X, out, *args, **kwargs):
@@ -96,8 +108,11 @@ class _ProblemaLote(Problem):
         F[ruim] = F_NAN
         viol[ruim] = VIOLACAO_NAN
         self.registro.append((params, F.copy(), viol.copy()))
-        out["F"] = F
-        out["G"] = viol[:, None]
+        if self.penalizar:
+            out["F"] = np.where(viol[:, None] > 0, F_PENAL + viol[:, None], F)
+        else:
+            out["F"] = F
+            out["G"] = viol[:, None]
 
 
 def criar_algoritmo(nome: str, n_obj: int, populacao: int, espaco: Espaco, semente: int = 0):
@@ -107,8 +122,26 @@ def criar_algoritmo(nome: str, n_obj: int, populacao: int, espaco: Espaco, semen
     from pymoo.util.ref_dirs import get_reference_directions
 
     if nome == "auto":
-        nome = "nsga2" if n_obj <= 2 else "nsga3"
+        nome = "ga" if n_obj == 1 else "nsga2" if n_obj == 2 else "nsga3"
     reparo = _Arredondar(espaco)
+    if nome in ("ga", "cmaes") and n_obj != 1:
+        raise ValueError(f"{nome} é para 1 objetivo (há {n_obj}); use auto, nsga2 ou nsga3")
+    if nome == "ga":
+        # mesmos operadores (SBX + mutação polinomial) e reparo dos discretos do NSGA-II;
+        # seleção por torneio e sobrevivência "viável primeiro, depois menor F"
+        from pymoo.algorithms.soo.nonconvex.ga import GA
+        return nome, GA(pop_size=populacao, repair=reparo, eliminate_duplicates=True)
+    if nome == "cmaes":
+        nao = [p.nome for p in espaco.parametros if not isinstance(p, Continuo)]
+        if nao:
+            raise ValueError("cmaes só com parâmetros contínuos (inteiro/categórico não têm "
+                             f"a ordem que ele supõe): {', '.join(nao)}; use ga")
+        from pymoo.algorithms.soo.nonconvex.cmaes import CMAES
+        # lote = população (a GPU avalia todos juntos); 1º lote = amostra LHS do mesmo
+        # tamanho, x0 = o melhor dela; sigma 0,25 do intervalo (busca global, não local)
+        alg = CMAES(pop_size=populacao, sigma=0.25, tolfun=1e-11, tolx=1e-11)
+        alg.n_sample_points = populacao   # (pelo construtor iria parar nas opções do cma)
+        return nome, alg
     if nome == "nsga2":
         return nome, NSGA2(pop_size=populacao, repair=reparo, eliminate_duplicates=True)
     if n_obj < 2:
@@ -121,7 +154,8 @@ def criar_algoritmo(nome: str, n_obj: int, populacao: int, espaco: Espaco, semen
     if nome == "rvea":
         return nome, RVEA(ref_dirs=ref, pop_size=populacao, repair=reparo,
                           eliminate_duplicates=True)
-    raise ValueError(f"algoritmo desconhecido: {nome!r} (use auto, nsga2, nsga3 ou rvea)")
+    raise ValueError(f"algoritmo desconhecido: {nome!r} "
+                     "(use auto, ga, cmaes, nsga2, nsga3 ou rvea)")
 
 
 class Sessao:
@@ -145,7 +179,8 @@ class Sessao:
         self.sentidos = list(sentidos) if sentidos else ["min"] * n_obj
         self.nome_alg, alg = criar_algoritmo(algoritmo, n_obj, populacao, espaco, semente)
         self._pendente: tuple | None = None
-        self.problema = _ProblemaLote(espaco, lambda p: self._pendente, n_obj)
+        self.problema = _ProblemaLote(espaco, lambda p: self._pendente, n_obj,
+                                      penalizar=self.nome_alg == "cmaes")
         self.alg = copy.deepcopy(alg)
         self.alg.setup(self.problema, termination=("n_gen", geracoes), seed=semente, verbose=verbose)
         self.info = dict(populacao=populacao, geracoes=geracoes, semente=semente)

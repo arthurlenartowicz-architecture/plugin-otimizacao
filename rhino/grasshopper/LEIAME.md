@@ -136,7 +136,7 @@ o lado do GH).
    |---|---|---|
    | `caso` | gh | pasta `resultados/<caso>/` |
    | `populacao`, `geracoes`, `semente` | 48, 20, 0 | |
-   | `algoritmo` | auto | nsga2 / nsga3 / rvea |
+   | `algoritmo` | auto (1 obj. → ga, 2 → nsga2, 3+ → nsga3) | ga / cmaes (1 obj., só contínuos) / nsga2 / nsga3 / rvea |
    | `nivel` | rapido | rapido / padrao / validacao |
    | `epw` | 1º de `data/epw` | caminho do clima |
    | `malha` | minima | malha dos Breps: minima / rapida / padrao / qualidade (curvos: padrao) |
