@@ -19,7 +19,7 @@ Ciclo: Rhino (parâmetros) → núcleo → módulos → otimizador → aplica so
   categóricos), cache e resolução de dependências entre módulos
 - `modulos/`: um por tema, todos com o mesmo contrato
   (sol_luz, termico, vento, estrutura, acustica, carbono_custo, programa)
-- `otimizacao/`: NSGA-II (até 3 objetivos), NSGA-III/RVEA (4 ou mais),
+- `otimizacao/`: NSGA-II (2 objetivos), NSGA-III/RVEA (3 ou mais),
   coordenadas paralelas, clusters do Pareto
 - `ia/`: modelos substitutos (PhysicsNeMo), usados só onde a física é cara
 - `rhino/`: plugin C# (interface, leitura da geometria, visualização)
@@ -284,8 +284,8 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 - Otimizador (`otimizacao/otimizador.py`): `otimizar(espaco, avaliador, nomes, ...)`,
   avaliador = lista de dicts → (F para minimizar, violação), uma chamada por
   geração; `avaliador_motor`/`otimizar_problema` ligam ao `motor.avaliar_problema`
-  (cache do clima mantido entre gerações). `auto` = NSGA-II até 3 objetivos,
-  NSGA-III com 4+ (direções de referência "energy", nº = população); RVEA opcional.
+  (cache do clima mantido entre gerações). `auto` = NSGA-II com 2 objetivos,
+  NSGA-III com 3+ (direções de referência "energy", nº = população); RVEA opcional.
   Restrição única G = violação. NaN/inf → F = 1e12 e violação 1e6 (inviável).
   Todas as avaliações ficam no `Resultado`; a frente sai desse arquivo (viáveis,
   sem repetidas, não dominadas), `F_final` = população final. `objetivos` volta
@@ -298,8 +298,9 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 - Validação 3 (`testes/test_otimizacao.py`): ZDT1/2/3 (NSGA-II, 100 × 200): IGD
   do arquivo ≤ 0,0022, da população ≤ 0,006. DTLZ2 (frente = esfera):
   3 obj NSGA-II dist. à esfera 0,008, IGD 0,077; NSGA-III 0,0008 e IGD 0,0091
-  (ideal com 92 pontos 0,0083) → com 3 objetivos o NSGA-III espalha bem melhor
-  (o `auto` segue o plano, NSGA-II; usar `algoritmo="nsga3"` com 3 objetivos);
+  (ideal com 92 pontos 0,0083) → com 3 objetivos o NSGA-III espalha bem melhor;
+  por isso o `auto` passou a usar NSGA-III a partir de 3 objetivos (decisão do
+  usuário, 2026-11-27; o plano original era NSGA-II até 3);
   5 obj NSGA-III e RVEA no IGD ideal (0,1784 com 126 pontos). Treliça Pratt
   (altura contínua, nº de painéis inteiro, tubo categórico; massa × flecha com
   utilização ≤ 100%): NSGA-II com 400 avaliações chega a 100,05% do hipervolume

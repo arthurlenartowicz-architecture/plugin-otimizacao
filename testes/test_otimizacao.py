@@ -91,7 +91,7 @@ def _frente_dtlz2(m, particoes):
     return pf / np.linalg.norm(pf, axis=1, keepdims=True)   # frente = esfera unitária
 
 
-@pytest.mark.parametrize("m,algoritmo,esperado", [(3, "auto", "nsga2"), (3, "nsga3", "nsga3"),
+@pytest.mark.parametrize("m,algoritmo,esperado", [(3, "nsga2", "nsga2"), (3, "auto", "nsga3"),
                                                   (5, "auto", "nsga3"), (5, "rvea", "rvea")])
 def test_dtlz2(m, algoritmo, esperado):
     """DTLZ2: frente = parte positiva da esfera unitária. Convergência = |‖F‖ − 1|;
