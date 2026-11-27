@@ -221,9 +221,12 @@ def _b64(arr, tamanho):
 
 
 def _parametros_malha(qual):
-    return {"minima": rg.MeshingParameters.Minimal, "rapida": rg.MeshingParameters.FastRenderMesh,
-            "padrao": rg.MeshingParameters.Default,
-            "qualidade": rg.MeshingParameters.QualityRenderMesh}.get(qual, rg.MeshingParameters.Minimal)
+    if qual in ("minima", "", None):
+        mp = rg.MeshingParameters.Minimal
+        mp.SimplePlanes = True       # face plana = poucos triângulos (não uma grade)
+        return mp
+    return {"rapida": rg.MeshingParameters.FastRenderMesh, "padrao": rg.MeshingParameters.Default,
+            "qualidade": rg.MeshingParameters.QualityRenderMesh}.get(qual) or _parametros_malha("minima")
 
 
 def _geom(o):

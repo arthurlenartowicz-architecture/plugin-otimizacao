@@ -350,5 +350,12 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 - Testes 3b: `test_servidor.py` (protocolo; dois clientes falsos por HTTP na mesma fila;
   servidor = `otimizar_problema` direto, mesma semente; erro de geometria → inviável;
   sala pelo protocolo em mm com contexto em `fixas` = protótipo nas 6 métricas do
-  sol_luz) e `test_gh.py` (sala exportada pelo `avaliar` do GH × `predio_de`; pulado até
-  o usuário rodar no Rhino).
+  sol_luz) e `test_gh.py` (sala exportada pelo `avaliar` do GH × `predio_de`).
+- Validação GH (2026-11-27, Rhino 8, sala com janela N 40%, rotação 0): áreas e normais
+  por rótulo iguais ao protótipo; no nível validação radiação na cobertura igual
+  (731,98), fachada +0,15%, DA −0,04, UDI +0,01, sDA −0,35 ponto. No rápido a cobertura
+  deu −2,3%: o `MeshingParameters.Minimal` sem SimplePlanes fez uma grade (32
+  triângulos na cobertura, 182 na fachada × 2 e 14 no protótipo) e com a grade de 2 m
+  os sensores caem em outros lugares. Por isso o teste compara no validação e o
+  `minima` do componente liga `SimplePlanes`. Malhar + converter a sala no GH: ~1 ms.
+  Gabarito em `testes/referencias/gh/variante_sala_gh.json` (versionado).

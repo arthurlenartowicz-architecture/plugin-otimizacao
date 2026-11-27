@@ -6,7 +6,10 @@ O arquivo vem do botão `avaliar` do otimizar.gh (caso = sala_gh):
 testes/referencias/gh/variante_sala_gh.json — pedido do /avaliar (geometria em base64,
 escala, contexto) + genoma (valores dos sliders) + tempo do lado do GH.
 A triangulação do GH é outra (parede com furo × faixas), então os sensores mudam de
-lugar: áreas iguais, métricas com tolerância.
+lugar: áreas iguais; métricas comparadas no nível `validacao` (grade fina), onde a
+discretização some. No `rapido` (grade de 2 m) a diferença chega a ~2% só por isso
+(1ª rodada no Rhino, malha Minimal sem SimplePlanes: cobertura 716 × 733 no rápido,
+731,98 × 731,98 no validação).
 """
 import json
 from pathlib import Path
@@ -22,9 +25,11 @@ from testes.conftest import EPWS_REAIS
 ARQ = Path(__file__).parent / "referencias" / "gh" / "variante_sala_gh.json"
 CHAVES = ["sol_luz.radiacao_fachada", "sol_luz.radiacao_cobertura", "sol_luz.ase",
           "sol_luz.da", "sol_luz.sda", "sol_luz.udi"]
-# tolerâncias: radiação relativa; as outras em pontos percentuais
-TOL = {"sol_luz.radiacao_fachada": 0.03, "sol_luz.radiacao_cobertura": 0.01,
-       "sol_luz.ase": 3.0, "sol_luz.da": 2.0, "sol_luz.sda": 5.0, "sol_luz.udi": 2.0}
+NIVEL = "validacao"
+# tolerâncias: radiação relativa; as outras em pontos percentuais (sDA = fração de área,
+# muda em degraus de um sensor)
+TOL = {"sol_luz.radiacao_fachada": 0.01, "sol_luz.radiacao_cobertura": 0.01,
+       "sol_luz.ase": 1.0, "sol_luz.da": 1.0, "sol_luz.sda": 2.0, "sol_luz.udi": 1.0}
 
 pytestmark = pytest.mark.skipif(not ARQ.is_file() or not EPWS_REAIS,
                                 reason="rode 'avaliar' no otimizar.gh (caso = sala_gh) antes")
@@ -71,12 +76,12 @@ def test_metricas_do_gh_iguais_ao_prototipo():
     from otimiza.nucleo.motor import avaliar
     from otimiza.servidor.servico import Servico
     d = json.loads(ARQ.read_text(encoding="utf-8"))
-    nivel = d.get("nivel", "rapido")
     sv = Servico()
-    via = sv.avaliar(dict(d, metricas=CHAVES, epw=str(EPWS_REAIS[0])))
+    via = sv.avaliar(dict(d, metricas=CHAVES, epw=str(EPWS_REAIS[0]), nivel=NIVEL))
+    agora = sv.avaliar(dict(d, epw=str(EPWS_REAIS[0])))      # nível do GH, para o fim
     sv.encerrar()
     ref = avaliar(CenaLote(variantes=[_prototipo(d["genoma"])], clima=ler_epw(EPWS_REAIS[0])),
-                  CHAVES, nivel)
+                  CHAVES, NIVEL)
     for k in CHAVES:
         a, b = via["valores"][k][0], float(ref[k][0])
         print(f"{k:28s} GH {a:9.3f}  protótipo {b:9.3f}")
@@ -86,5 +91,5 @@ def test_metricas_do_gh_iguais_ao_prototipo():
             assert abs(a - b) <= TOL[k], k
     # o que o servidor deu na hora (no Rhino) = o que dá agora
     for k, v in d.get("valores_gh", {}).items():
-        if k in via["valores"] and v[0] is not None:
-            assert np.isclose(via["valores"][k][0], v[0], rtol=1e-3, atol=0.5), k
+        if k in agora["valores"] and v[0] is not None:
+            assert np.isclose(agora["valores"][k][0], v[0], rtol=1e-3, atol=0.5), k
