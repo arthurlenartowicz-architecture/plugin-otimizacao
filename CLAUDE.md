@@ -61,7 +61,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
     espacial): deslocamentos, rotações, energia e esforços com erro ~1e-13.
 - [x] 3. Otimizador + Pareto no Rhino → MVP do TCC
   - [x] 3b · Parâmetros e geometria do Grasshopper (servidor + componente Otimizar);
-    conferido no Rhino 8 (validação + otimização). Falta confirmar o `aplicar` do Pareto
+    conferido no Rhino 8 (validação, otimização e `aplicar` do Pareto)
 - [ ] 4. Plugin C# completo + térmico, carbono/custo, programa
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
     - [ ] carga de resfriamento e aquecimento, kWh/ano 🟡 (modelo RC em lote
@@ -364,3 +364,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   GH 15,8 ms/variante (sliders → NewSolution → malha → base64) = 79% do tempo; GPU
   1,3 ms/variante = 6%; o resto é HTTP e espera do timer. O gargalo é o recálculo do GH,
   como previsto: para acelerar, vários Rhinos/Compute na mesma fila (protocolo pronto).
+- `otimizar.gh` traz Otimizar e Pareto na mesma definição (`montar_otimizar.py` chama
+  `adicionar_pareto` do `montar_pareto.py`, carregado com `_SO_FUNCOES`): cada montador
+  criava um documento novo e um "fechava" o outro. Conferido no Rhino 8 (2026-11-27):
+  Pareto recarrega no fim da otimização e o `aplicar` leva a solução aos sliders.
