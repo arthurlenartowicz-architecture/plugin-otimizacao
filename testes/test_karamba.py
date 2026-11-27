@@ -117,10 +117,10 @@ def test_massa(caso):
     m = kr.get("massa")
     if not isinstance(m, float):
         pytest.skip("massa não exportada")
-    razao = m / float(r.massa[0])
-    # o Karamba guarda o peso específico γ = 78,5 kN/m³ e a massa = γ/g; nós usamos ρ = 7850 kg/m³
-    print(f"{nome}: massa nós {float(r.massa[0]):.2f} kg, Karamba {m:.2f} (razão {razao:.4f})")
-    assert 0.97 < razao < 1.03
+    # a unidade de massa do Karamba é força/aceleração = kN/(m/s²) = tonelada (karamba.ini)
+    razao = m * 1000 / float(r.massa[0])
+    print(f"{nome}: massa nós {float(r.massa[0]):.2f} kg, Karamba {m:.5f} t (razão {razao:.6f})")
+    assert abs(razao - 1) < 1e-4
 
 
 def test_deslocamento_maximo(caso):

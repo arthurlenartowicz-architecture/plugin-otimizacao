@@ -54,11 +54,11 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   - [x] 1f · Integração: tudo no contrato de módulo (`sol_luz`), com os níveis
     rápido, padrão e validação, e um benchmark de quantas variantes por segundo
     a 5070 aguenta.
-- [ ] 2. Estrutura: FEM de barras em lote (validar contra o Karamba)
+- [x] 2. Estrutura: FEM de barras em lote (validar contra o Karamba)
   - [x] 2a · FEM de barras (treliça e pórtico 3D) em lote na GPU, módulo
     `estrutura` no contrato, testes analíticos.
-  - [ ] 2b · Validação contra o Karamba (script pela API pronto; falta rodar
-    `montar_karamba.py` no Rhino, apertar `rodar` e o `testes/test_karamba.py`).
+  - [x] 2b · Validação contra o Karamba3D 3.1 (pórtico espacial e treliça
+    espacial): deslocamentos, rotações, energia e esforços com erro ~1e-13.
 - [ ] 3. Otimizador + Pareto no Rhino → MVP do TCC
 - [ ] 4. Plugin C# completo + térmico, carbono/custo, programa
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
@@ -263,3 +263,13 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   (0 = Euler-Bernoulli, o padrão), φ = 12EI/(G·As·L²). O Karamba usa Timoshenko;
   no pórtico de teste isso muda o deslocamento em ~0,7%. Kg (flambagem) continua
   a de Euler-Bernoulli. `props` passou a ter 12 colunas (… rho, Ay, Az).
+- Resultado 2b (2026-11-27, Karamba3D 3.1.60921, licença student): com as áreas
+  de cisalhamento do Karamba (Ay = Az = 0,637·A no tubo RO114.3/4) o nosso FEM
+  bate com erro ~1e-13 em deslocamento máximo, translações e rotações nodais,
+  energia e esforços máximos por barra (N, Mt, M) nos dois casos; flambagem:
+  treliça igual, pórtico 12,974 (Karamba) × 12,972 (nós), 0,015% (a Kg nossa é
+  de Euler-Bernoulli). Sem cisalhamento (Euler-Bernoulli) o pórtico desloca
+  0,5% menos. Massa do Karamba sai em t (kN/(m/s²)); seção A e Iyy em m², m⁴;
+  E em kN/m²; resultados em m, kN, kN·m, rad. Nós do Karamba na mesma ordem
+  dos nossos (1ª aparição nas barras). Gabarito versionado em
+  `testes/referencias/karamba/karamba_<caso>.json`.
