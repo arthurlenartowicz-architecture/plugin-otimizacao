@@ -34,7 +34,7 @@ def para_dict(s: Estrutura, nome: str, secao_tubo: tuple[float, float] | None = 
         raise ValueError("casos do Karamba só com cargas nodais (a distribuída é validada analiticamente)")
     secoes = []
     for p in s.props:
-        d = {k: float(v) for k, v in zip(PROPS[:7], p[:7])}
+        d = {k: float(v) for k, v in zip(PROPS[:7] + PROPS[10:], list(p[:7]) + list(p[10:]))}
         d["circular"] = bool(d["circular"])
         if secao_tubo:
             d["D"], d["t"] = secao_tubo
@@ -64,7 +64,8 @@ def de_dict(d: dict) -> Estrutura:
     barras = torch.tensor(d["barras"], dtype=torch.long)
     m = d["material"]
     props = torch.tensor([[sc["A"], sc["Iy"], sc["Iz"], sc["J"], sc["Wy"], sc["Wz"],
-                           float(sc["circular"]), m["E"], m["G"], m["rho"]] for sc in d["secoes"]],
+                           float(sc["circular"]), m["E"], m["G"], m["rho"],
+                           sc.get("Ay", 0.0), sc.get("Az", 0.0)] for sc in d["secoes"]],
                          dtype=DT)
     nn = nos.shape[0]
     ap = torch.zeros(nn, 6, dtype=torch.bool)

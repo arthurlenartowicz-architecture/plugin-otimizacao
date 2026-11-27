@@ -44,6 +44,8 @@ class Secao:
     Wy: float    # m³ módulo elástico
     Wz: float
     circular: bool = False  # tensão de flexão = √(My² + Mz²)/W (senão |My|/Wy + |Mz|/Wz)
+    Ay: float = 0.0         # m² área de cisalhamento (cortante Vy); 0 = sem deformação por
+    Az: float = 0.0         # cortante (Euler-Bernoulli); > 0 = Timoshenko, como o Karamba
 
 
 def tubo_circular(D: float, t: float) -> Secao:
@@ -66,7 +68,7 @@ def retangulo(b: float, h: float) -> Secao:
 class Estrutura:
     nos: torch.Tensor          # (Nn, 3) m
     barras: torch.Tensor       # (Nb, 2) índices dos nós
-    props: torch.Tensor        # (Nb, 10): A Iy Iz J Wy Wz circular E G rho  — ver PROPS
+    props: torch.Tensor        # (Nb, 12): A Iy Iz J Wy Wz circular E G rho Ay Az — ver PROPS
     fy: torch.Tensor           # (Nb,) kN/m²
     trelica: torch.Tensor      # (Nb,) bool: só esforço axial
     apoios: torch.Tensor       # (Nn, 6) bool: grau de liberdade travado
@@ -95,8 +97,8 @@ class Estrutura:
         secao = secao or tubo_circular(0.1143, 0.004)  # padrão do Karamba (RO114.3/4)
         secs = secao if isinstance(secao, (list, tuple)) else [secao] * nb
         mats = material if isinstance(material, (list, tuple)) else [material] * nb
-        props = torch.tensor([[s.A, s.Iy, s.Iz, s.J, s.Wy, s.Wz, float(s.circular), m.E, m.G, m.rho]
-                              for s, m in zip(secs, mats)], dtype=DT)
+        props = torch.tensor([[s.A, s.Iy, s.Iz, s.J, s.Wy, s.Wz, float(s.circular), m.E, m.G, m.rho,
+                               s.Ay, s.Az] for s, m in zip(secs, mats)], dtype=DT)
         fy = torch.tensor([m.fy for m in mats], dtype=DT)
         tr = torch.as_tensor(trelica, dtype=torch.bool).expand(nb).clone()
         ap = torch.zeros(nn, 6, dtype=torch.bool)
@@ -119,7 +121,7 @@ class Estrutura:
         return float((self.props[:, 0] * self.props[:, 9] * self.comprimentos()).sum())
 
 
-PROPS = ("A", "Iy", "Iz", "J", "Wy", "Wz", "circular", "E", "G", "rho")
+PROPS = ("A", "Iy", "Iz", "J", "Wy", "Wz", "circular", "E", "G", "rho", "Ay", "Az")
 
 
 # ---------------------------------------------------------------- matrizes do elemento
@@ -140,8 +142,18 @@ def _simetrizar(k):
     return k + k.transpose(1, 2) - torch.diag_embed(torch.diagonal(k, dim1=1, dim2=2))
 
 
-def rigidez_local(L, A, Iy, Iz, J, E, G, trelica) -> torch.Tensor:
-    """(E, 12, 12) matriz de rigidez no sistema local."""
+def _phi(E, I, G, As, L):
+    """Parâmetro de Timoshenko φ = 12EI/(G·As·L²); 0 onde As = 0 (Euler-Bernoulli)."""
+    return torch.where(As > 0, 12 * E * I / (G * As.clamp(min=1e-30) * L ** 2), torch.zeros_like(L))
+
+
+def rigidez_local(L, A, Iy, Iz, J, E, G, trelica, Ay=None, Az=None) -> torch.Tensor:
+    """(E, 12, 12) matriz de rigidez no sistema local (com deformação por cortante
+    onde Ay/Az > 0)."""
+    zero = torch.zeros_like(L)
+    fy_ = 1 / (1 + _phi(E, Iz, G, zero if Ay is None else Ay, L))   # plano xy (cortante Vy)
+    fz_ = 1 / (1 + _phi(E, Iy, G, zero if Az is None else Az, L))   # plano xz (cortante Vz)
+    py, pz = 1 / fy_ - 1, 1 / fz_ - 1
     k = torch.zeros(L.shape[0], 12, 12, dtype=L.dtype, device=L.device)
     ea, gj = E * A / L, G * J / L
     k[:, 0, 0] = k[:, 6, 6] = ea
@@ -151,21 +163,23 @@ def rigidez_local(L, A, Iy, Iz, J, E, G, trelica) -> torch.Tensor:
     k[:, 3, 3] = k[:, 9, 9] = gj
     k[:, 3, 9] = -gj
     # flexão no plano xy (v, θz): 1, 5, 7, 11
-    a, b, c = 12 * E * Iz / L ** 3 * viga, 6 * E * Iz / L ** 2 * viga, E * Iz / L * viga
+    f = fy_ * viga
+    a, b, c = 12 * E * Iz / L ** 3 * f, 6 * E * Iz / L ** 2 * f, E * Iz / L * f
     k[:, 1, 1] = k[:, 7, 7] = a
     k[:, 1, 7] = -a
     k[:, 1, 5] = k[:, 1, 11] = b
     k[:, 5, 7] = k[:, 7, 11] = -b
-    k[:, 5, 5] = k[:, 11, 11] = 4 * c
-    k[:, 5, 11] = 2 * c
+    k[:, 5, 5] = k[:, 11, 11] = (4 + py) * c
+    k[:, 5, 11] = (2 - py) * c
     # flexão no plano xz (w, θy): 2, 4, 8, 10
-    a, b, c = 12 * E * Iy / L ** 3 * viga, 6 * E * Iy / L ** 2 * viga, E * Iy / L * viga
+    f = fz_ * viga
+    a, b, c = 12 * E * Iy / L ** 3 * f, 6 * E * Iy / L ** 2 * f, E * Iy / L * f
     k[:, 2, 2] = k[:, 8, 8] = a
     k[:, 2, 8] = -a
     k[:, 2, 4] = k[:, 2, 10] = -b
     k[:, 4, 8] = k[:, 8, 10] = b
-    k[:, 4, 4] = k[:, 10, 10] = 4 * c
-    k[:, 4, 10] = 2 * c
+    k[:, 4, 4] = k[:, 10, 10] = (4 + pz) * c
+    k[:, 4, 10] = (2 - pz) * c
     return _simetrizar(k)
 
 
@@ -357,12 +371,12 @@ def _resolver_lote(estruturas, n_sub, flambagem, detalhes, device) -> Resultado:
     V = len(estruturas)
     lt = _preparar(estruturas, n_sub, device)
     p = lt.props
-    A, Iy, Iz, J, Wy, Wz, circ, E, G, rho = p.unbind(1)
+    A, Iy, Iz, J, Wy, Wz, circ, E, G, rho, Ay, Az = p.unbind(1)
     dx = lt.xj - lt.xi
     L = dx.norm(dim=1)
     R = eixos_locais(dx / L[:, None])
     T = _bloco(R)
-    kl = rigidez_local(L, A, Iy, Iz, J, E, G, lt.trelica)
+    kl = rigidez_local(L, A, Iy, Iz, J, E, G, lt.trelica, Ay, Az)
     ke = T.transpose(1, 2) @ kl @ T
 
     # cargas: nós + distribuídas + peso próprio (−z)

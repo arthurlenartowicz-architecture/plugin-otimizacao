@@ -33,6 +33,20 @@ def test_console_carga_na_ponta():
     assert rel(r.massa[0], SEC.A * L * ACO_S235.rho) < 1e-12
 
 
+def test_console_timoshenko():
+    """Com área de cisalhamento: δ = PL³/(3EI) + PL/(G·Az); sem ela, Euler-Bernoulli."""
+    import dataclasses
+    L, P = 1.5, 20.0
+    sec = dataclasses.replace(SEC, Ay=SEC.A / 2, Az=SEC.A / 2)
+    s = Estrutura.criar([[0, 0, 0], [L, 0, 0]], [[0, 1]], sec, apoios={0: ENGASTE},
+                        cargas={1: (0, -P, -P)})
+    for n_sub in (1, 3):
+        u = resolver([s], n_sub=n_sub, detalhes=True).deslocamentos[0][1]
+        flex = P * L ** 3 / (3 * E * SEC.Iy) + P * L / (G * SEC.A / 2)
+        assert rel(-u[2], flex) < 1e-9 and rel(-u[1], flex) < 1e-9
+        assert rel(abs(u[4]), P * L ** 2 / (2 * E * SEC.Iy)) < 1e-9  # rotação não muda
+
+
 def test_console_axial_torcao_e_lateral():
     L, N, Tq, Py = 2.0, 40.0, 3.0, 2.0
     r = resolver([console(L, {1: (N, Py, 0, Tq, 0, 0)})], detalhes=True)

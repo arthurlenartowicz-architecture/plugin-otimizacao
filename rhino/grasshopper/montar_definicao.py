@@ -62,20 +62,8 @@ ENTRADAS = [
     ("modelo_hb_ofusc", False, "HB Model com a grade de vistas (1e)"),
     ("hb_ga", True, "GA do HB Imageless Annual Glare"),
     ("hb_ofusc_resultados", False, "pasta results do HB Imageless Annual Glare"),
-    ("karamba", True, "JSON dos casos do Karamba (Empacotar Karamba)"),
     ("exportar", False, "Ligue a um botão"),
 ]
-CASOS_KARAMBA = ("portico", "trelica")
-CODIGO_CASO_KR = os.path.join(PASTA_GH, "caso_karamba.py")
-CODIGO_PACOTE_KR = os.path.join(PASTA_GH, "empacotar_karamba.py")
-ENTRADAS_CASO_KR = [("arquivo", False, "entrada_<nome>.json")]
-SAIDAS_CASO_KR = ("nome", "nos", "vigas", "trelicas", "apoios", "condicoes", "pontos_carga",
-                  "forcas", "momentos", "info")
-ENTRADAS_PACOTE_KR = [(n, "arvore", d) for n, d in [
-    ("nome", "nome do caso"), ("massa", "Mass do Assemble Model"), ("desloc_max", "Disp do Analyze"),
-    ("energia", "energia de deformação do Analyze"), ("trans", "Trans do Nodal Displacements"),
-    ("rot", "Rot do Nodal Displacements"), ("N", "N do Beam Forces"), ("V", "V do Beam Forces"),
-    ("M", "M do Beam Forces"), ("flambagem", "BLFacs do Buckling Modes"), ("modelo", "Model")]]
 
 
 def achar_epw():
@@ -121,8 +109,7 @@ def painel(gh, doc, texto, apelido, x, y, largura=320):
     return p
 
 
-def criar_ghpython(gh, doc, x, y, entradas=None, saidas=("log",), codigo_arq=None,
-                   apelido="Exportar referencias"):
+def criar_ghpython(gh, doc, x, y):
     proxy = None
     for px in gh.Instances.ComponentServer.ObjectProxies:
         if px.Desc.Name == "GhPython Script":
@@ -139,38 +126,35 @@ def criar_ghpython(gh, doc, x, y, entradas=None, saidas=("log",), codigo_arq=Non
     # troca as entradas padrão (x, y) pelas nossas
     for p in list(comp.Params.Input):
         comp.Params.UnregisterInputParameter(p, True)
-    acesso = gh.Kernel.GH_ParamAccess
-    for i, (nome, lista, desc) in enumerate(entradas or ENTRADAS):
+    for i, (nome, lista, desc) in enumerate(ENTRADAS):
         p = comp.CreateParameter(lado_in, i)
         p.Name = nome
         p.NickName = nome
         p.Description = desc
         p.Optional = True
-        p.Access = acesso.tree if lista == "arvore" else (acesso.list if lista else acesso.item)
+        p.Access = gh.Kernel.GH_ParamAccess.list if lista else gh.Kernel.GH_ParamAccess.item
         comp.Params.RegisterInputParam(p, i)
 
-    # saídas: mantém "out" (mensagens do print) e troca o resto pelas nossas
+    # saídas: mantém "out" (mensagens do print) e troca o resto por "log"
     for p in list(comp.Params.Output):
         if p.NickName != "out":
             comp.Params.UnregisterOutputParameter(p, True)
-    for nome in saidas:
-        p = comp.CreateParameter(lado_out, comp.Params.Output.Count)
-        p.Name = nome
-        p.NickName = nome
-        p.Description = nome
-        comp.Params.RegisterOutputParam(p, comp.Params.Output.Count)
+    p = comp.CreateParameter(lado_out, comp.Params.Output.Count)
+    p.Name = "log"
+    p.NickName = "log"
+    p.Description = "Resumo do que foi gravado"
+    comp.Params.RegisterOutputParam(p, comp.Params.Output.Count)
 
     comp.Params.OnParametersChanged()
     comp.VariableParameterMaintenance()
 
-    codigo_arq = codigo_arq or CODIGO
-    codigo = System.IO.File.ReadAllText(codigo_arq, System.Text.Encoding.UTF8)  # acentos certos no IronPython
+    codigo = System.IO.File.ReadAllText(CODIGO, System.Text.Encoding.UTF8)  # acentos certos no IronPython
     try:
         comp.Code = codigo
     except Exception as e:
         print("Não consegui colocar o código no componente (" + str(e) + "). "
-              "Abra o componente e cole o conteúdo de " + codigo_arq)
-    comp.NickName = apelido
+              "Abra o componente e cole o conteúdo de " + CODIGO)
+    comp.NickName = "Exportar referencias"
     comp.Attributes.ExpireLayout()
     return comp
 
@@ -441,103 +425,6 @@ def montar_ofuscamento(gh, doc, hb, entrada):
     ligar(entrada["hb_ofusc_resultados"], sai(glare, "results"))
 
 
-def _comp_karamba(gh, doc, nomes, x, y):
-    """Componente do Karamba pelo primeiro nome que existir (os nomes variam entre versões)."""
-    for px in gh.Instances.ComponentServer.ObjectProxies:
-        if px.Desc.Name in nomes:
-            obj = gh.Instances.ComponentServer.EmitObject(px.Guid)
-            if obj is not None:
-                return colocar(doc, obj, x, y)
-    print("Aviso: componente do Karamba '" + "/".join(nomes) + "' não encontrado (Karamba3D instalado?).")
-    return None
-
-
-def _param_kr(comp, lado, apelidos, primeiro=False):
-    """Parâmetro pelo apelido/nome (sem diferenciar maiúsculas); se não achar e
-    primeiro=True, usa o primeiro parâmetro."""
-    if comp is None:
-        return None
-    lista = comp.Params.Input if lado == "in" else comp.Params.Output
-    alvos = [a.lower() for a in apelidos]
-    for p in lista:
-        if (p.NickName or "").lower() in alvos or (p.Name or "").lower() in alvos:
-            return p
-    if primeiro and lista.Count:
-        return lista[0]
-    print("Aviso: " + comp.Name + " sem parâmetro " + "/".join(apelidos) + "; ligue à mão.")
-    return None
-
-
-def montar_karamba(gh, doc, entrada):
-    """Etapa 2: um modelo do Karamba por caso de testes/referencias/karamba/entrada_<nome>.json.
-    Caso Karamba (lê o JSON) -> Line to Beam/Truss, Support, Loads -> Assemble -> Analyze ->
-    Nodal Displacements, Beam Forces, Buckling Modes -> Empacotar Karamba -> exportador."""
-    pasta_kr = os.path.join(PASTA_REF, "karamba")
-    for n, nome in enumerate(CASOS_KARAMBA):
-        x0, y0 = 150, 3300 + 700 * n
-        arq = painel(gh, doc, os.path.join(pasta_kr, "entrada_" + nome + ".json"), "arquivo " + nome,
-                     x0, y0, 360)
-        caso = criar_ghpython(gh, doc, x0 + 420, y0, ENTRADAS_CASO_KR, SAIDAS_CASO_KR,
-                              CODIGO_CASO_KR, "Caso Karamba " + nome)
-        ligar(caso.Params.Input[0], arq)
-        sai = dict((p.NickName, p) for p in caso.Params.Output)
-
-        viga = _comp_karamba(gh, doc, ("Line to Beam", "LineToBeam"), x0 + 650, y0)
-        trel = _comp_karamba(gh, doc, ("Line to Truss", "LineToTruss"), x0 + 650, y0 + 120)
-        apoio = _comp_karamba(gh, doc, ("Support", "Supports"), x0 + 650, y0 + 240)
-        carga = _comp_karamba(gh, doc, ("Point-Load", "Point Load", "Loads", "Load"), x0 + 650, y0 + 380)
-        mont = _comp_karamba(gh, doc, ("Assemble Model", "Assemble"), x0 + 900, y0 + 100)
-        anal = _comp_karamba(gh, doc, ("Analyze", "AnalyzeThI", "Analyze ThI"), x0 + 1100, y0)
-        desl = _comp_karamba(gh, doc, ("Nodal Displacements", "NodalDisp"), x0 + 1300, y0)
-        forc = _comp_karamba(gh, doc, ("Beam Forces", "Beam Resultant Forces"), x0 + 1300, y0 + 160)
-        flam = _comp_karamba(gh, doc, ("Buckling Modes", "BucklingModes"), x0 + 1300, y0 + 320)
-        pac = criar_ghpython(gh, doc, x0 + 1550, y0, ENTRADAS_PACOTE_KR, ("texto",), CODIGO_PACOTE_KR,
-                             "Empacotar Karamba " + nome)
-        pin = dict((p.NickName, p) for p in pac.Params.Input)
-
-        ligar(_param_kr(viga, "in", ("Line", "Lines", "L"), True), sai["vigas"])
-        ligar(_param_kr(trel, "in", ("Line", "Lines", "L"), True), sai["trelicas"])
-        ligar(_param_kr(apoio, "in", ("Pos|Ind", "Pos", "Pt", "Point", "Points", "Node", "Nodes"), True),
-              sai["apoios"])
-        ligar(_param_kr(apoio, "in", ("Cond", "Conditions", "Condition")), sai["condicoes"])
-        ligar(_param_kr(carga, "in", ("Pos|Ind", "Pos", "Pt", "Point", "Points"), True), sai["pontos_carga"])
-        ligar(_param_kr(carga, "in", ("Force", "Vec", "F", "Force-Vector")), sai["forcas"])
-        ligar(_param_kr(carga, "in", ("Moment", "Mom", "M", "Moment-Vector")), sai["momentos"])
-        el = _param_kr(mont, "in", ("Elem", "Element", "Elements"))
-        ligar(el, _param_kr(viga, "out", ("Elem", "Element", "Beam", "Beams"), True))
-        ligar(el, _param_kr(trel, "out", ("Elem", "Element", "Truss", "Trusses"), True))
-        ligar(_param_kr(mont, "in", ("Point", "Points", "Pt", "Node", "Nodes")), sai["nos"])
-        ligar(_param_kr(mont, "in", ("Support", "Supports")), _param_kr(apoio, "out", ("Support",), True))
-        ligar(_param_kr(mont, "in", ("Load", "Loads")), _param_kr(carga, "out", ("Load", "Loads"), True))
-        modelo = _param_kr(mont, "out", ("Model",), True)
-        ligar(_param_kr(anal, "in", ("Model",), True), modelo)
-        m_anal = _param_kr(anal, "out", ("Model",), True)
-        for c in (desl, forc, flam):
-            ligar(_param_kr(c, "in", ("Model",), True), m_anal)
-
-        ligar(pin["nome"], sai["nome"])
-        ligar(pin["massa"], _param_kr(mont, "out", ("Mass",)))
-        ligar(pin["desloc_max"], _param_kr(anal, "out", ("Disp", "D", "Displacement", "MaxDisp")))
-        ligar(pin["energia"], _param_kr(anal, "out", ("Energy", "Comp", "E", "DefEnergy")))
-        ligar(pin["trans"], _param_kr(desl, "out", ("Trans", "Translations")))
-        ligar(pin["rot"], _param_kr(desl, "out", ("Rot", "Rotations")))
-        for k in ("N", "V", "M"):
-            ligar(pin[k], _param_kr(forc, "out", (k,)))
-        ligar(pin["flambagem"], _param_kr(flam, "out", ("BLFacs", "BLFac", "Factors", "LoadFactors")))
-        ligar(pin["modelo"], m_anal)
-        ligar(entrada["karamba"], pac.Params.Output[pac.Params.Output.Count - 1])
-
-        nota = painel(
-            gh, doc,
-            "CONFERIR NO KARAMBA (" + nome + "): Support com as condições do painel 'condicoes' "
-            "(pórtico: engaste x y z rx ry rz; treliça: só x y z); Loads do tipo ponto (Point load); "
-            "seção e material padrão (RO114.3/4, S235). Se um parâmetro não ligou, veja os avisos "
-            "na linha de comando do Rhino e ligue à mão.",
-            "LEIA Karamba " + nome, x0, y0 + 60, 380)
-        nota.Properties.Multiline = True
-        nota.Attributes.Bounds = sd.RectangleF(x0, y0 + 60, 380, 110)
-
-
 def montar():
     gh = abrir_grasshopper()
     doc = novo_documento(gh)
@@ -563,7 +450,6 @@ def montar():
     montar_estudo(gh, doc, lb, entrada)
     hb = montar_honeybee(gh, doc, p_epw, entrada)
     montar_ofuscamento(gh, doc, hb, entrada)
-    montar_karamba(gh, doc, entrada)
 
     log = painel(gh, doc, "", "log", 850, 200, 360)
     log.Attributes.Bounds = sd.RectangleF(850, 200, 360, 160)

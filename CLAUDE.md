@@ -57,8 +57,8 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 - [ ] 2. Estrutura: FEM de barras em lote (validar contra o Karamba)
   - [x] 2a · FEM de barras (treliça e pórtico 3D) em lote na GPU, módulo
     `estrutura` no contrato, testes analíticos.
-  - [ ] 2b · Validação contra o Karamba (definição montada; falta exportar
-    e rodar `testes/test_karamba.py`).
+  - [ ] 2b · Validação contra o Karamba (script pela API pronto; falta rodar
+    `montar_karamba.py` no Rhino, apertar `rodar` e o `testes/test_karamba.py`).
 - [ ] 3. Otimizador + Pareto no Rhino → MVP do TCC
 - [ ] 4. Plugin C# completo + térmico, carbono/custo, programa
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
@@ -240,11 +240,22 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   (o `eigvalsh` em lote domina; se pesar, trocar por iteração de subespaço).
 - Validação Karamba (2b): casos em `testes/referencias/karamba/entrada_<caso>.json`
   (`scripts/gerar_casos_karamba.py`; pórtico espacial 2 pav. engastado e malha
-  espacial 4×3 articulada nos cantos; tubo RO114.3/4 e S235, padrões do
-  Karamba; só cargas nodais). No GH: "Caso Karamba" (`caso_karamba.py`) lê o
-  JSON → componentes do Karamba achados por nome → "Empacotar Karamba"
-  (`empacotar_karamba.py`) → entrada `karamba` do exportador → grava
-  `karamba/karamba_<caso>.json`. A API de script do Karamba não foi usada
-  (guia oficial fora do ar); condições do Support e tipo do Loads podem
-  precisar de ajuste à mão. O teste deduz as unidades (m/cm/mm) e compara
-  esforços por |N| e momento resultante máximos por barra.
+  espacial 4×3 articulada nos cantos; tubo RO114.3/4 e aço S235, os padrões do
+  Karamba; só cargas nodais). O 1º montador (componentes do Karamba no canvas,
+  dentro da definição do LB/HB) travava o Rhino: refeito como definição à parte
+  (`montar_karamba.py` → `validar_karamba.gh`) com UM componente GhPython
+  (`karamba_validar.py`) que usa a API do Karamba 3.1.60921, conferida por
+  reflexão do `KarambaCommon.dll` instalado e pelos exemplos em
+  `Examples/Scripts` (o guia online estava fora do ar): `Toolkit().Part.LineToBeam`
+  (bending=False = treliça), `CroSec.CircularHollow` (cm), `FemMaterial.defaultSteel()`,
+  `Support.Support(Point3, conds)`, `Load.PointLoad(Point3, F, M, "LC0", False)`,
+  `Model.AssembleModel(..., points=nós)`, `Algorithms.Analyze.solve(m, ["LC0"])`,
+  `Results.NodeDisplacements.solve`, `Results.BeamForces.solve(..., ts)`,
+  `Algorithms.Buckling.solve(m, 1, 3, 300, 1e-7, 1)`. Saídas com out em
+  IronPython: tupla (finais) ou `clr.Reference` (no meio). O script confere a
+  unidade da seção pela massa. O teste casa nós por posição, deduz unidades e
+  usa as áreas de cisalhamento (Ay, Az) informadas pelo Karamba.
+- Deformação por cortante (Timoshenko) opcional no nosso elemento: `Secao.Ay/Az`
+  (0 = Euler-Bernoulli, o padrão), φ = 12EI/(G·As·L²). O Karamba usa Timoshenko;
+  no pórtico de teste isso muda o deslocamento em ~0,7%. Kg (flambagem) continua
+  a de Euler-Bernoulli. `props` passou a ter 12 colunas (… rho, Ay, Az).

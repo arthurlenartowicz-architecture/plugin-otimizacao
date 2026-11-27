@@ -39,13 +39,23 @@ e `exportar`.
 
 ## Karamba (Etapa 2)
 
-A montagem também cria, para cada caso de `testes/referencias/karamba/`
-(`portico`, `trelica`), o "Caso Karamba", os componentes do Karamba e o
-"Empacotar Karamba", ligado à entrada `karamba` do exportador. Antes de
-exportar, confira no canvas (painel "LEIA Karamba"): condições do Support
-(pórtico: engaste; treliça: só x, y, z), Loads do tipo carga pontual, e
-parâmetros que não ligaram (avisos na linha de comando do Rhino). Depois:
+Definição separada e pequena (não mexe na do Ladybug/Honeybee). Uma vez, no Rhino 8:
+
+```
+_-RunPythonScript "C:\Users\PC\Documents\plugin-otimizacao\rhino\grasshopper\montar_karamba.py"
+```
+
+Cria `validar_karamba.gh` com um único componente GhPython ("Validar Karamba",
+código de `karamba_validar.py`), um botão `rodar` e um painel de log. Nenhum
+componente do Karamba vai para o canvas e nada roda na montagem. Ao apertar
+`rodar`, o componente lê cada `testes/referencias/karamba/entrada_<caso>.json`,
+monta e analisa o modelo pela API do Karamba (KarambaCommon.Toolkit) e grava
+`karamba_<caso>.json` na mesma pasta. Também dá para rodar sem o Grasshopper:
+`_-RunPythonScript "...\rhino\grasshopper\karamba_validar.py"` (o log sai na
+linha de comando). Depois:
 
 ```powershell
 .venv\Scripts\python.exe -m pytest testes\test_karamba.py -v -s
 ```
+
+Se algo falhar, copie o painel de log (tem o erro completo).
