@@ -361,6 +361,7 @@ class Laco(object):
     def __init__(self, componente, op, pedido, params, objs):
         self.trabalhador = pedido is None
         self.rodada = None
+        self.visto = None
         self.comp = componente
         self.doc = componente.OnPingDocument()
         self.op = op
@@ -393,6 +394,13 @@ class Laco(object):
             self.escrever(u"Subindo o servidor (1ª vez carrega a GPU, ~10-20 s)…")
         self.timer.Start()
 
+    def _ver(self, desc):
+        """Diagnóstico do trabalhador: registra quando muda o que ele vê no servidor."""
+        if desc != self.visto:
+            self.visto = desc
+            if self.trabalhador:
+                self.escrever(u"Trabalhador vê: " + desc)
+
     def _vista(self, ligada):
         if not self.mostrar:
             Rhino.RhinoDoc.ActiveDoc.Views.RedrawEnabled = ligada
@@ -411,7 +419,10 @@ class Laco(object):
         u = self.ultimo
         pre = u"trabalhador · " if self.trabalhador else u""
         if self.estado == "conectando" or not u:
-            return pre + (u"esperando otimização" if self.trabalhador else self.estado)
+            if self.trabalhador:   # contador: mostra que o timer está rodando
+                return pre + u"%s · %d s" % (self.visto or u"esperando",
+                                             int(time.time() - self.t_inicio))
+            return self.estado
         g, G = u.get("geracao", 0), u.get("geracoes", 1)
         txt = pre + u"ger %d/%d" % (min(g + 1, G), G)
         if u.get("estado") == "avaliando":
@@ -457,12 +468,17 @@ class Laco(object):
     def _conectar(self):
         if not self.trabalhador and time.time() - self.t_inicio > 120:
             raise ErroServidor(u"o servidor não respondeu em 120 s (veja a janela de console)")
-        if time.time() < self.t_espera or not servidor_vivo(self.porta):
+        if time.time() < self.t_espera:
+            self.mensagem(self.progresso())
+            return
+        if not servidor_vivo(self.porta):
             self.t_espera = time.time() + (1.0 if self.trabalhador else 0.5)
+            self._ver(u"servidor fora do ar")
             self.mensagem(self.progresso())
             return
         if self.trabalhador:
             r = http(self.porta, "GET", "/estado")
+            self._ver(u"servidor: %s" % r.get("estado"))
             if r.get("estado") not in ("gerando", "avaliando"):
                 self.t_espera = time.time() + 1.0      # nenhuma otimização em andamento
                 self.mensagem(self.progresso())
