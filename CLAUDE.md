@@ -22,7 +22,8 @@ Ciclo: Rhino (parâmetros) → núcleo → módulos → otimizador → aplica so
 - `otimizacao/`: NSGA-II (2 objetivos), NSGA-III/RVEA (3 ou mais),
   coordenadas paralelas, clusters do Pareto
 - `ia/`: modelos substitutos (PhysicsNeMo), usados só onde a física é cara
-- `rhino/`: plugin C# (interface, leitura da geometria, visualização)
+- `rhino/`: plugin C# (painel no Rhino, componentes do Grasshopper, leitura da
+  geometria, visualização). Ver "Interface do usuário"
 - `testes/`: validação de cada módulo
 
 ## Contrato de módulo
@@ -33,9 +34,53 @@ com um valor por variante. Tudo roda em lote. Níveis de precisão:
 Um problema de otimização é uma lista de objetivos e restrições no formato
 `"modulo.metrica"`, e o motor roda só os módulos necessários.
 
+## Interface do usuário
+Plano aprovado (2026-11-27). Referência: Jifto (painel direto no Rhino, uma aba
+por análise, conector ao vivo com o GH). O que este plugin acrescenta: a
+otimização. Três camadas, todas chamando a mesma biblioteca C# (a casca de
+componentes do GH continua fina). O que já existe: componente Otimizar
+(`Otimiza.gha`) e o Pareto (GhPython) = embrião das camadas 2 e 3.
+
+1. **Painel no Rhino** (Eto.Forms, Rhino 8 e 9)
+   - Aba **Cena**: botões "Selecionar entorno" e "Selecionar edifício
+     analisado", arquivo EPW e localização. A seleção é só uma etiqueta no
+     objeto (UserText) que vira o rótulo da `CenaLote` (entorno, contexto,
+     fachada, vidro…): nunca apagar, mover nem alterar a geometria do usuário,
+     e esconder uma layer não deve mudar a cena por acidente (problemas
+     relatados no Jifto).
+   - **Uma aba por módulo**: configurações, nível de precisão, botão
+     "Calcular", legenda de cores sobre o modelo (DisplayConduit) e métricas
+     resumidas.
+2. **Componentes do Grasshopper** (os "cards", como Ladybug/Karamba)
+   - "Entorno", "Edifício" e "Clima": alimentam a cena ao vivo, sem bake.
+   - Um componente de análise por módulo (uma variante, resultado na hora).
+   - Os parâmetros do edifício vêm de qualquer coisa do GH (sliders,
+     Pufferfish, outros plugins de modelagem). Um componente "Genes" diz ao
+     otimizador quais sliders/Value Lists ele pode mexer (hoje o genoma é
+     lido direto das entradas do Otimizar).
+3. **Aba de Otimização**
+   - Lista de todas as métricas registradas pelos módulos: o usuário marca
+     1 ou várias, escolhe min/max e define restrições (vira o Problema em
+     texto do protocolo).
+   - Algoritmo automático pelo número de objetivos: 1 → GA ou CMA-ES (falta
+     implementar); 2 → NSGA-II; 3+ → NSGA-III/RVEA.
+   - Gráficos ao vivo: convergência por geração (hipervolume / melhor valor),
+     frente de Pareto 2D/3D, coordenadas paralelas, clusters (com 1 objetivo:
+     só a curva do melhor).
+   - Clicar numa solução aplica os valores nos sliders e mostra a geometria
+     no Rhino (o `aplicar` do Pareto já faz isso).
+
+### Geração de variantes (dois modos)
+- **Via Grasshopper** (já implementado na 3b/4c): o otimizador pede uma
+  geração inteira, o GH gera uma a uma e a GPU avalia todas juntas. Flexível;
+  o gargalo é o recálculo do GH (~13 ms/variante na sala de exemplo).
+- **Parâmetros nativos** (a fazer): formas simples (altura, rotação, recuos,
+  janelas, brises, treliças) geradas pelo próprio motor, sem passar pelo GH
+  (base: `prototipos.predio_de`, `estrutura.prototipos`). Bem mais rápido.
+
 ## Stack
 Python 3 · PyTorch (CUDA 12.8+) · NVIDIA Warp · XLB (vento/LBM) ·
-PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
+PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin)
 
 ## Etapas
 - [x] 0. Ambiente: CUDA, PyTorch, Warp, teste de GPU, estrutura, git
@@ -71,6 +116,9 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
     conforto adaptativo), validado contra o EnergyPlus
   - [x] 4c · plugin C# (`rhino/plugin/`, Otimiza.gha): componente Otimizar no lugar do
     `otimizar_gh.py`, mesmo protocolo v1; testado contra o servidor real e no Rhino 8
+  - [ ] 4f · interface do usuário (seção "Interface do usuário"): painel no Rhino com
+    aba Cena e aba por módulo, componentes GH por módulo + Genes, aba de Otimização
+    (escolha de 1 ou mais objetivos, GA/CMA-ES para 1, gráficos ao vivo), parâmetros nativos
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
     - [x] carga de resfriamento e aquecimento, kWh/ano 🟡 (modelo RC em lote
       por zona; ganhos solares vêm do `sol_luz`)
@@ -516,3 +564,8 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   20,3 s (3b: 19,2 s). O ganho no GH foi comido pela GPU e pela espera entre gerações; o
   gargalo segue sendo o recálculo do GH (para acelerar: vários Rhinos, ou a geometria do
   exemplo em C#).
+- Interface do usuário (2026-11-27): três camadas (painel no Rhino estilo Jifto,
+  componentes do GH, aba de Otimização), descritas na seção "Interface do usuário";
+  entra como 4f. Otimização com 1 objetivo usa GA/CMA-ES. Dois modos de gerar
+  variantes: via GH (o atual) e parâmetros nativos gerados pelo motor. Interface em
+  Eto.Forms. Marcar entorno/edifício é só etiqueta: nunca altera a geometria.
