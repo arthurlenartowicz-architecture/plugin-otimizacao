@@ -92,7 +92,7 @@ def indice_patch(d: wp.vec3, alpha: float, n_faixas: int,
 # ------------------------------------------------------------------ kernels
 @wp.kernel
 def _k_coeficientes(ids: wp.array(dtype=wp.uint64), var: wp.array(dtype=wp.int32),
-                    base_face: wp.array(dtype=wp.int32),
+                    loc: wp.array(dtype=wp.int32), base_face: wp.array(dtype=wp.int32),
                     rho: wp.array(dtype=float), a0_vidro: wp.array(dtype=float),
                     orig: wp.array(dtype=wp.vec3), nrm: wp.array(dtype=wp.vec3),
                     n_raios: int, max_reflexoes: int, semente: int,
@@ -100,7 +100,7 @@ def _k_coeficientes(ids: wp.array(dtype=wp.uint64), var: wp.array(dtype=wp.int32
                     npf: wp.array(dtype=wp.int32), ini: wp.array(dtype=wp.int32), col_solo: int,
                     c_dir: wp.array2d(dtype=float), c_ref: wp.array2d(dtype=float)):
     s, k = wp.tid()
-    estado = wp.rand_init(semente, s * n_raios + k)
+    estado = wp.rand_init(semente, loc[s] * n_raios + k)   # índice local: independe do lote
     malha = ids[var[s]]
     b0 = base_face[var[s]]
     o = orig[s]
@@ -225,7 +225,7 @@ def coeficientes_luz(cena: Cena, materiais: Materiais, ceu: Ceu, pontos, normais
     c_dir = torch.zeros(S, P + 1, dtype=torch.float32, device=dev)
     c_ref = torch.zeros(S, P + 1, dtype=torch.float32, device=dev)
     wp.launch(_k_coeficientes, dim=(S, n_raios), device=dev, inputs=[
-        cena.ids, var, _wp(materiais.base_face, dev),
+        cena.ids, var, cena._indice_local(variante, S), _wp(materiais.base_face, dev),
         _wp(materiais.refletancia.float(), dev), _wp(a0, dev),
         _wp(pontos.float(), dev, wp.vec3), _wp(normais.float(), dev, wp.vec3),
         n_raios, max_reflexoes, semente,

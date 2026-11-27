@@ -95,7 +95,7 @@ def indice_de_posicao(vista: torch.Tensor) -> torch.Tensor:
 # ------------------------------------------------------------------ kernel
 @wp.kernel
 def _k_coef_pixels(ids: wp.array(dtype=wp.uint64), var: wp.array(dtype=wp.int32),
-                   base_face: wp.array(dtype=wp.int32),
+                   loc: wp.array(dtype=wp.int32), base_face: wp.array(dtype=wp.int32),
                    rho: wp.array(dtype=float), a0_vidro: wp.array(dtype=float),
                    olho: wp.array(dtype=wp.vec3), dir_v: wp.array(dtype=wp.vec3),
                    cima_v: wp.array(dtype=wp.vec3), frente_v: wp.array(dtype=wp.vec3),
@@ -107,7 +107,8 @@ def _k_coef_pixels(ids: wp.array(dtype=wp.uint64), var: wp.array(dtype=wp.int32)
     linha, k = wp.tid()            # linha = vista * n_pix + pixel
     vi = linha / n_pix
     pi = linha - vi * n_pix
-    estado = wp.rand_init(semente, linha * amostras + k)
+    # semente pela vista local (dentro da variante): independe do lote
+    estado = wp.rand_init(semente, (loc[vi] * n_pix + pi) * amostras + k)
     # direção com sorteio dentro do pixel (projeção angular: r ∝ θ)
     u = uv[pi][0] + (wp.randf(estado) - 0.5) * passo_uv
     v = uv[pi][1] + (wp.randf(estado) - 0.5) * passo_uv
@@ -182,7 +183,8 @@ def coeficientes_vistas(cena: Cena, materiais: Materiais, ceu: Ceu, olho, frente
     c_ref = torch.zeros(V * N, P + 1, dtype=torch.float32, device=dev)
     w = lambda t, dt=None: wp.from_torch(t.to(device=dev).contiguous(), dtype=dt)
     wp.launch(_k_coef_pixels, dim=(V * N, amostras), device=dev, inputs=[
-        cena.ids, var, w(materiais.base_face), w(materiais.refletancia.float()), w(a0),
+        cena.ids, var, cena._indice_local(variante, V), w(materiais.base_face),
+        w(materiais.refletancia.float()), w(a0),
         w(olho.float(), wp.vec3), w(d.float(), wp.vec3), w(c.float(), wp.vec3), w(f.float(), wp.vec3),
         w(g.uv.float(), wp.vec2), N, 2.0 / n, amostras, max_reflexoes, semente,
         float(ceu.alpha), int(ceu.n_por_faixa.shape[0]),

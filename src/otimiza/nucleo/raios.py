@@ -104,6 +104,22 @@ class Cena:
             v = variante.to(device=self.device, dtype=torch.int32).contiguous()
         return wp.from_torch(v)
 
+    def _indice_local(self, variante, n) -> wp.array:
+        """Posição de cada ponto entre os pontos da sua variante (0, 1, 2… por variante).
+        Semente dos raios no path tracing: o resultado de uma variante não depende de quem
+        está no mesmo lote, e variantes diferentes usam os mesmos números aleatórios por
+        sensor (compará-las tem menos ruído)."""
+        if variante is None or isinstance(variante, int):
+            loc = torch.arange(n, dtype=torch.int32, device=self.device)
+        else:
+            v = variante.to(device=self.device, dtype=torch.int64).reshape(-1)
+            ordem = torch.argsort(v, stable=True)
+            vs = v[ordem]
+            pos = torch.arange(n, device=self.device) - torch.searchsorted(vs, vs)
+            loc = torch.empty(n, dtype=torch.int32, device=self.device)
+            loc[ordem] = pos.to(torch.int32)
+        return wp.from_torch(loc.contiguous())
+
 
 # ---------------------------------------------------------------------- kernels
 @wp.kernel

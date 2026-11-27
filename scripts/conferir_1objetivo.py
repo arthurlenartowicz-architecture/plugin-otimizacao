@@ -9,7 +9,7 @@ rhino/grasshopper/conferir_1objetivo.py) e confere:
   2. até 20 soluções distintas, do maior DA ao menor;
   3. reavaliação independente: as soluções montadas pelo protótipo em Python
      (`prototipos.predio_de`, a mesma sala) dão o mesmo DA (a malha do GH é outra,
-     e o path tracing tem ruído, então tolerância de 2 pontos, média 0,5) e o melhor
+     então tolerância de 2 pontos, média 0,5) e o melhor
      continua entre os melhores;
   4. o GA não perde da busca aleatória com o mesmo orçamento nem do maior DA
      da otimização de 3 objetivos (resultados/sala_gh), se ela existir.
@@ -24,8 +24,8 @@ RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "src"))
 sys.path.insert(0, str(RAIZ))
 
-# pontos percentuais: malha do GH × protótipo e ruído do path tracing no nível rápido (o
-# DA de um projeto muda com os vizinhos de lote: média 0,09, cauda até ~2 pontos)
+# pontos percentuais: a malha do GH é outra (sensores em outros lugares, ~2% no nível
+# rápido); o ruído entre lotes não existe mais (semente por variante, ver CLAUDE.md)
 TOL_DA_MAX, TOL_DA_MEDIA = 2.0, 0.5
 
 

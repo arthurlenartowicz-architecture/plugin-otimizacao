@@ -636,7 +636,15 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
   Otimiza.gha, `max sol_luz.da`, caso `sala_1obj`, salva em `resultados/`) e
   `scripts/conferir_1objetivo.py` (lê o resultado.json, reavalia pelo protótipo, compara com a
   busca aleatória e com a otimização de 3 objetivos). Falta rodar no Rhino para marcar a 4f1.
-- Achado na 4f1: o DA de um projeto depende dos vizinhos de lote (a semente dos raios segue a
-  posição no lote; o mesmo lote repetido dá o mesmo valor). 192 salas, lote 192 × lotes de 48:
-  rápido |dif| média 0,09, p95 0,30, máx 1,6 pontos; padrão 0,02 / 0,05 / 0,56. Na sala de
-  exemplo o DA máximo é fácil (janelas grandes): GA 93,8 × busca aleatória 93,7 com 960.
+- Semente dos raios (achado na 4f1): o DA de um projeto dependia dos vizinhos de lote (a
+  semente seguia a posição no lote). 192 salas, lote 192 × lotes de 48: rápido |dif| média 0,09,
+  p95 0,30, máx 1,6 pontos; padrão 0,02 / 0,05 / 0,56. Corrigido: motores B e C usam como
+  semente a posição do sensor/pixel dentro da própria variante (`Cena._indice_local`); a mesma
+  variante dá o mesmo valor em qualquer lote, e variantes diferentes usam os mesmos números
+  aleatórios por sensor (comparar projetos tem menos ruído). Com uma variante só nada muda
+  (índice local = índice antigo): validações 1c/1d/1e iguais. Teste: `test_semente_lote.py`
+  (sala sozinha, no início, no meio e no fim do lote; falhava com o código antigo).
+  Na sala de exemplo o DA máximo é fácil (janelas grandes): GA 93,8 × busca aleatória 93,7.
+- O CMA-ES do pymoo não é reprodutível entre processos/ordens de teste (depende de estado
+  global de números aleatórios): no Rastrigin 5D a semente 0 deu 0 sozinha e 1,99 na suíte.
+  O `test_sessao_igual_ao_otimizar` (mesmo processo) continua idêntico.
