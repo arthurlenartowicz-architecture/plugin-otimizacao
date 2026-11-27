@@ -111,6 +111,8 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
   - Plano aprovado (2026-11-27): 4a térmico 🟢 → 4b modelo RC (cargas, EUI, conforto,
     balanço zero; validar contra EnergyPlus via honeybee_energy) → 4c plugin C# (troca só o
     `otimizar_gh.py`, mesmo protocolo v1; precisa do .NET 8 SDK) → 4d carbono/custo → 4e programa.
+    Ordem revista (2026-11-27, plano da 4f): 4f1 → 4f2 → 4d → 4e → 4f3 → 4f4 → 4f5 (4d e 4e
+    antes dos componentes e do painel, porque devem trazer rótulos/materiais e genes novos).
   - [x] 4a · térmico 🟢: compacidade, WWR, ganho solar, UTCI (módulo `termico`)
   - [x] 4b · térmico 🟡: modelo RC multicamadas em lote (cargas, EUI, balanço zero, PPD,
     conforto adaptativo), validado contra o EnergyPlus
@@ -119,6 +121,50 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
   - [ ] 4f · interface do usuário (seção "Interface do usuário"): painel no Rhino com
     aba Cena e aba por módulo, componentes GH por módulo + Genes, aba de Otimização
     (escolha de 1 ou mais objetivos, GA/CMA-ES para 1, gráficos ao vivo), parâmetros nativos
+    - Plano aprovado (2026-11-27). Cada subetapa: entrega · validação · conferência no Rhino.
+    - [ ] 4f1 · 1 objetivo: `auto` 1 → GA, 2 → NSGA-II, 3+ → NSGA-III; `algoritmo = cmaes`
+      (pacote `cma` 4.6.0 já instalado) só com todos os parâmetros contínuos (num categórico o
+      CMA-ES supõe uma ordem que não existe). Com 1 objetivo a "frente" = o melhor projeto.
+      Validação: esfera 10D (perto de 0 num orçamento fixo); Rastrigin 2D (ótimo global) e
+      5D (melhor que a busca aleatória com o mesmo orçamento), GA e CMA-ES; treliça Pratt
+      com 1 objetivo (massa, utilização ≤ 100%) = ótimo da busca exaustiva (735 projetos)
+      ou a < 1%. Rhino: sala com `max sol_luz.da`, `aplicar` leva ao melhor.
+    - [ ] 4f2 · Janela de Otimização (Eto), aberta pelo Otimizar: métricas do `GET /metricas`
+      (unidade, sentido), 1 ou mais objetivos, min/max, restrições, nível, população,
+      gerações; problema guardado no componente (salvo no .gh), entrada `problema` em texto
+      sobrescreve. Gráficos num WebView com plotly.js (cópia local, versão fixa, sem
+      internet; ponte JS ↔ C# para o clique): convergência (hipervolume; melhor valor com 1
+      objetivo), Pareto 2D/3D, coordenadas paralelas, clusters (conta no `pareto.py`).
+      Clique → `aplicar` nos sliders. Protocolo: `GET /progresso` novo (histórico por geração
+      + frente atual), só adição, versão continua 1. Código em `Otimiza.UI` (sem depender do
+      GH, para o painel da 4f4). `pareto.gh` segue valendo até a janela ser aprovada.
+      Validação (`Otimiza.Testes`, lógica fora da tela): texto do problema montado = esperado;
+      16 × 4 contra o servidor real: hipervolume do arquivo não decresce (referência fixa),
+      frente final = `resultado.json`; solução → valores dos sliders. Rhino: sala 48 × 20,
+      gráficos andando por geração, clicar em 3 pontos e conferir sliders/geometria; mesma
+      solução na janela e no `pareto.gh`.
+    - [ ] 4d e 4e (ver acima), entram na janela automaticamente pelo `/metricas`.
+    - [ ] 4f3 · Componentes do GH: Clima (EPW, local), Entorno e Edifício (geometria + rótulo
+      → objeto Cena), Genes (sliders/Value Lists ligados = genoma), um de análise por módulo
+      (`/avaliar` na hora). Otimizar aceita Cena + Genes e mantém as entradas atuais.
+      4f3b · campos por sensor: `Modulo.campos(...)` no contrato (sensores + valores: radiação,
+      DA, horas de sol, UTCI) e opção no `/avaliar`; malha colorida como no Ladybug.
+      Validação: sala montada com os componentes = Python (`predio_de`) no nível validação,
+      tolerâncias do `test_gh.py`, mesmo genoma do Otimizar atual; Σ campo × área = métrica.
+      Rhino: mexer num slider, métrica e cores mudam na hora.
+    - [ ] 4f4 · Painel no Rhino (`.rhp`): aba Cena (UserText `otimiza.rotulo`, nunca altera
+      geometria; cena lida pela etiqueta, não pela visibilidade da layer; EPW), aba por
+      módulo (ajustes, nível, Calcular, DisplayConduit com legenda pelos campos, métricas),
+      janela da 4f2 como aba Otimização. Biblioteca comum (Cliente + UI) passa ao `.rhp`; o
+      `.gha` depende dele (resolve a DLL ao lado do `.gha` carregado por bytes). Validação:
+      selecionar/calcular/limpar não mudam a geometria (hash de vértices e atributos, fora
+      o UserText); esconder/trancar layer não muda a cena; métricas = componente da 4f3.
+      Rhino: marcar, Ctrl+Z, esconder layers, calcular, ver a legenda.
+    - [ ] 4f5 · Parâmetros nativos: `/iniciar` com `gerador` ("predio", "trelica") e faixas;
+      o servidor gera e avalia sem o GH; Rhino só mostra (DisplayConduit; bake em layer nova
+      só se o usuário pedir); "Modo: GH | nativo" na janela. Validação: nativo = 
+      `otimizar_problema` direto (mesma semente); mesmo genoma → mesma geometria nos dois
+      modos. Medir: sala 48 × 20 via GH 20,3 s × nativo (previsto ~3 s).
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
     - [x] carga de resfriamento e aquecimento, kWh/ano 🟡 (modelo RC em lote
       por zona; ganhos solares vêm do `sol_luz`)
