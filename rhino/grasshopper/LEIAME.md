@@ -140,7 +140,8 @@ o lado do GH).
    | `nivel` | rapido | rapido / padrao / validacao |
    | `epw` | 1º de `data/epw` | caminho do clima |
    | `malha` | minima | malha dos Breps: minima / rapida / padrao / qualidade (curvos: padrao) |
-   | `lote` | 16 | tarefas pedidas por vez |
+   | `lote` | 4 | tarefas pedidas por vez (pequeno divide melhor entre vários Rhinos) |
+   | `modo` | principal | `trabalhador`: só ajuda outro Rhino (ver abaixo) |
    | `mostrar` | nao | `sim` redesenha a vista a cada variante (mais lento) |
    | `porta` | 8765 | |
    | `rho_<rótulo>`, `tau_vidro` | os do HB | materiais |
@@ -164,10 +165,27 @@ o lado do GH).
 
 Ele mostra as áreas por rótulo, as métricas do `sol_luz` (GH × protótipo) e o tempo do GH.
 
-**Vários Rhinos ao mesmo tempo:** o servidor é uma fila de tarefas. Outras instâncias do
-Rhino com a mesma definição podem pegar tarefas da otimização em andamento (modo
-"trabalhador", a fazer no C#; o protocolo já aceita). Tarefa sem resposta em 120 s volta
-para a fila.
+**Vários Rhinos ao mesmo tempo (modo trabalhador).** O recálculo do GH é o gargalo
+(uma variante por vez em cada Rhino); com mais Rhinos, a mesma geração é dividida entre
+eles. No mesmo PC:
+
+1. Rhino A (principal): abra o `otimizar.gh` como sempre.
+2. Rhino B, C… (abra o Rhino de novo): abra o **mesmo** `otimizar.gh`, troque no painel
+   `opcoes` para `modo = trabalhador` (não precisa salvar) e aperte `iniciar`. A mensagem
+   fica "trabalhador · esperando otimização".
+3. No Rhino A, aperte `iniciar`. Os trabalhadores entram sozinhos, pegam tarefas da mesma
+   fila (`lote` por vez) e, quando a otimização acaba, voltam a esperar a próxima. O
+   resultado e o Pareto ficam no Rhino A.
+
+- `parar` num trabalhador: entrega o que já gerou e devolve o resto à fila (a otimização
+  segue nos outros). `parar` (ou Esc) no principal encerra a otimização para todos.
+  Atenção: o Esc é lido do teclado e vale para todos os Rhinos abertos; para parar um só,
+  use o botão.
+- O trabalhador confere se tem no `genoma` os mesmos nomes de parâmetros do principal;
+  contexto, escala e materiais vêm do principal.
+- Rhino que trava ou fecha no meio: as tarefas dele voltam à fila depois de 120 s.
+- Quantos vale a pena: cada Rhino usa um núcleo da CPU e ~1–2 GB de RAM; o ganho é até
+  ~N× enquanto a GPU (1,3 ms/variante na sala) não for o limite.
 
 ### Protocolo (versão 1)
 
@@ -196,12 +214,13 @@ contexto, entorno.
 
 | rota | corpo | resposta |
 |---|---|---|
-| `GET /estado` | | `estado` (livre, gerando, avaliando, fim, erro), `geracao`, `geracoes`, `lote`, `faltam`, `avaliacoes`, `no_cache`, `erro`, `arquivo`, tempos |
+| `GET /estado` | | `estado` (livre, gerando, avaliando, fim, erro), `rodada`, `parametros` (nomes), `geracao`, `geracoes`, `lote`, `faltam`, `avaliacoes`, `no_cache`, `erro`, `arquivo`, tempos |
 | `GET /metricas` | | `{"metricas": {modulo: {metrica: {unidade, sentido, descricao}}}}` |
 | `POST /iniciar` | `parametros`, `problema`, `nivel`, `algoritmo`, `populacao`, `geracoes`, `semente`, `epw`, `escala`, `materiais`, `fixas`, `caso`, `saida`, `cliente`, `reatribuir_s` | estado (substitui a otimização anterior) |
 | `POST /tarefas` | `{"maximo": 16}` (0 = todas) | estado + `tarefas: [{"id", "parametros": {nome: valor}}]`; lista vazia = aguardar (GPU avaliando ou outro cliente terminando) |
 | `POST /resultados` | `{"resultados": [{"id", "geometria", "tempo_s"?} \| {"id", "erro"}]}` | estado + `aceitos`, `erros` |
 | `POST /parar` | | estado (grava o que já foi avaliado) |
+| `POST /devolver` | `{"ids": [...]}` | estado + `devolvidas`: tarefas pegas e não feitas voltam já à fila |
 | `POST /avaliar` | `geometrias: [...]`, `metricas` ou `problema`, `nivel`, `epw`, `escala`, `materiais`, `fixas` | `{"valores": {"modulo.metrica": [...]}, "tempo_s"}` |
 | `POST /encerrar` | | desliga o servidor |
 
@@ -214,8 +233,10 @@ contexto, entorno.
   juntadas a toda variante. `cliente`: qualquer JSON, gravado em
   `resultado.json → info.cliente` (o GH guarda o GUID de cada slider para o `aplicar`).
 - Ciclo do cliente: `POST /iniciar` → repetir { `POST /tarefas` → gerar → `POST
-  /resultados` } até `estado` = `fim` ou `erro`. O `id` traz a geração (`"3-17"`):
-  resposta atrasada de outra geração é ignorada. Projetos já avaliados (mesmos valores)
+  /resultados` } até `estado` = `fim` ou `erro`. O `id` traz a rodada (nº da otimização
+  no servidor) e a geração (`"2-3-17"`): resposta atrasada de outra rodada ou geração é
+  ignorada. Vários clientes podem seguir esse ciclo ao mesmo tempo (trabalhadores: sem
+  o `/iniciar`; esperam `estado` = gerando no `GET /estado`). Projetos já avaliados (mesmos valores)
   não voltam como tarefa: o servidor reaproveita o resultado. Variante com `erro` ou
   geometria inválida vira inviável (não para a otimização).
 - Saída: `resultados/<caso>/resultado.json` (formato da Etapa 3, lido pelo Pareto) e

@@ -167,7 +167,8 @@ def montar():
     o_in["problema"].AddSource(painel(gh, doc, "max sol_luz.da\nmax sol_luz.udi\nmin sol_luz.ase",
                                       "problema", 460, 330, 180, 60, True))
     o_in["opcoes"].AddSource(painel(gh, doc, "caso = sala_gh\npopulacao = 48\ngeracoes = 20\n"
-                                             "nivel = rapido\nlote = 16\nmalha = minima",
+                                             "nivel = rapido\nlote = 4\nmalha = minima\n"
+                                             "modo = principal",
                                     "opcoes", 460, 400, 180, 100, True))
     for k, nome in enumerate(["iniciar", "parar", "avaliar"]):
         o_in[nome].AddSource(botao(gh, doc, nome, 520, 520 + 30 * k))

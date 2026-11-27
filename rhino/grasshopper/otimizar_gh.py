@@ -19,8 +19,11 @@ ENTRADAS (list access, sem type hint; todas opcionais menos genoma)
   problema   Panel, uma linha por objetivo/restrição: "max sol_luz.sda", "sol_luz.ase",
              "sol_luz.da >= 50"
   opcoes     Panel "chave = valor": populacao, geracoes, nivel, algoritmo, semente, epw,
-             caso, porta, malha, lote, mostrar, apoio, forca, trelica, gravidade,
+             caso, porta, malha, lote, mostrar, modo, apoio, forca, trelica, gravidade,
              rho_<rótulo>, tau_vidro (ver LEIAME.md)
+             modo = trabalhador: este Rhino só ajuda — pega tarefas da otimização que
+             outro Rhino (o principal, com a mesma definição) iniciou; fica esperando
+             as próximas até `parar`
   iniciar    botão: começa a otimização
   parar      botão: interrompe
   avaliar    botão: avalia só a variante atual (mostra as métricas e grava
@@ -349,14 +352,20 @@ def pedido_base(op, problema):
 
 # ---------------------------------------------------------------- laço (fora do SolveInstance)
 class Laco(object):
-    """Pega tarefas do servidor, aplica nos sliders, recalcula e devolve a geometria."""
+    """Pega tarefas do servidor, aplica nos sliders, recalcula e devolve a geometria.
+
+    pedido = None → modo trabalhador: não inicia nada; espera uma otimização no servidor
+    (aberta por outro Rhino, o principal), pega tarefas da mesma fila e, quando ela acaba,
+    espera a próxima, até `parar`."""
 
     def __init__(self, componente, op, pedido, params, objs):
+        self.trabalhador = pedido is None
+        self.rodada = None
         self.comp = componente
         self.doc = componente.OnPingDocument()
         self.op = op
         self.porta = _num(op, "porta", 8765, int)
-        self.lote = _num(op, "lote", 16, int)
+        self.lote = _num(op, "lote", 4, int)   # pequeno: divide melhor entre vários Rhinos
         self.mostrar = _sim(op, "mostrar", False)
         self.pedido = pedido
         self.params, self.objs = params, objs
@@ -376,10 +385,17 @@ class Laco(object):
         self.timer = ef.UITimer()
         self.timer.Interval = 0.005
         self.timer.Elapsed += self.tick
-        if not servidor_vivo(self.porta):
+        if self.trabalhador:
+            self.escrever(u"Modo trabalhador: esperando uma otimização no servidor (porta %d)."
+                          % self.porta)
+        elif not servidor_vivo(self.porta):
             subir_servidor(self.porta)
             self.escrever(u"Subindo o servidor (1ª vez carrega a GPU, ~10-20 s)…")
         self.timer.Start()
+
+    def _vista(self, ligada):
+        if not self.mostrar:
+            Rhino.RhinoDoc.ActiveDoc.Views.RedrawEnabled = ligada
 
     def escrever(self, txt):
         self.log.append(txt)
@@ -393,10 +409,11 @@ class Laco(object):
 
     def progresso(self):
         u = self.ultimo
-        if not u:
-            return self.estado
+        pre = u"trabalhador · " if self.trabalhador else u""
+        if self.estado == "conectando" or not u:
+            return pre + (u"esperando otimização" if self.trabalhador else self.estado)
         g, G = u.get("geracao", 0), u.get("geracoes", 1)
-        txt = u"ger %d/%d" % (min(g + 1, G), G)
+        txt = pre + u"ger %d/%d" % (min(g + 1, G), G)
         if u.get("estado") == "avaliando":
             txt += u" · GPU"
         elif u.get("lote"):
@@ -409,7 +426,9 @@ class Laco(object):
         feito = u.get("geracao", 0) + (lote - u.get("faltam", lote)) / float(lote)
         pos = int(100 * min(feito / G, 1.0))
         if not self.medidor:
-            Rhino.UI.StatusBar.ShowProgressMeter(0, 100, "Otimizando (Esc para parar)", True, True)
+            Rhino.UI.StatusBar.ShowProgressMeter(
+                0, 100, "Trabalhando (parar)" if self.trabalhador else "Otimizando (Esc para parar)",
+                True, True)
             self.medidor = True
         Rhino.UI.StatusBar.UpdateProgressMeter(pos, True)
 
@@ -436,25 +455,46 @@ class Laco(object):
             self.ocupado = False
 
     def _conectar(self):
-        if time.time() - self.t_inicio > 120:
+        if not self.trabalhador and time.time() - self.t_inicio > 120:
             raise ErroServidor(u"o servidor não respondeu em 120 s (veja a janela de console)")
         if time.time() < self.t_espera or not servidor_vivo(self.porta):
-            self.t_espera = time.time() + 0.5
+            self.t_espera = time.time() + (1.0 if self.trabalhador else 0.5)
+            self.mensagem(self.progresso())
             return
-        r = http(self.porta, "POST", "/iniciar", self.pedido)
+        if self.trabalhador:
+            r = http(self.porta, "GET", "/estado")
+            if r.get("estado") not in ("gerando", "avaliando"):
+                self.t_espera = time.time() + 1.0      # nenhuma otimização em andamento
+                self.mensagem(self.progresso())
+                return
+            meus = set(p["nome"] for p in self.params)
+            faltam = [n for n in r.get("parametros", []) if n not in meus]
+            if faltam:
+                raise ValueError(u"a otimização usa parâmetros que este Rhino não tem no genoma: "
+                                 + u", ".join(faltam) + u" (abra a mesma definição)")
+            self.rodada = r.get("rodada")
+            self.escrever(u"Entrou na otimização (rodada %s, geração %s)." % (
+                self.rodada, r.get("geracao")))
+        else:
+            r = http(self.porta, "POST", "/iniciar", self.pedido)
+            self.rodada = r.get("rodada")
+            self.escrever(u"Otimização iniciada: %s, %s × %s." % (
+                r.get("algoritmo"), self.pedido.get("populacao"), self.pedido.get("geracoes")))
         self.ultimo = r
         self.estado = "rodando"
-        if not self.mostrar:
-            Rhino.RhinoDoc.ActiveDoc.Views.RedrawEnabled = False
-        self.escrever(u"Otimização iniciada: %s, %s × %s." % (
-            r.get("algoritmo"), self.pedido.get("populacao"), self.pedido.get("geracoes")))
+        self._vista(False)
 
     def _trabalhar(self):
         if time.time() < self.t_espera:
             return
         t_fim = time.time() + 0.25           # bloco curto: depois devolve a vez à interface
         if not self.fila:
-            r = http(self.porta, "POST", "/tarefas", {"maximo": self.lote})
+            try:
+                r = http(self.porta, "POST", "/tarefas", {"maximo": self.lote})
+            except ErroServidor:
+                if not self.trabalhador:
+                    raise
+                return self._esperar_proxima(u"servidor sem otimização")
             self.ultimo = r
             if r["estado"] in ("fim", "erro"):
                 return self._terminou(r)
@@ -497,9 +537,40 @@ class Laco(object):
     def _terminou(self, r):
         if r.get("estado") == "erro":
             self.escrever(u"ERRO no servidor:\n%s" % r.get("erro"))
+        if self.trabalhador:
+            return self._esperar_proxima(u"otimização terminou")
         self.finalizar(r.get("estado", "fim"))
 
+    def _esperar_proxima(self, motivo):
+        """Trabalhador: volta a esperar uma nova otimização (não para)."""
+        self.fila, self.prontos = [], []
+        self.estado = "conectando"
+        self.t_espera = time.time() + 1.0
+        self._vista(True)
+        if self.medidor:
+            Rhino.UI.StatusBar.HideProgressMeter()
+            self.medidor = False
+        if self.tempos:
+            self.escrever(u"%s (rodada %s). Tempo no GH: %.1f ms/variante (%d variantes). "
+                          u"Esperando a próxima." % (motivo, self.rodada,
+                                                     1000 * sum(self.tempos) / len(self.tempos),
+                                                     len(self.tempos)))
+        self.tempos = []
+        self.mensagem(self.progresso())
+
     def parar(self, motivo=u"parado"):
+        if self.trabalhador:
+            try:   # entrega o que já gerou e devolve o resto para os outros Rhinos
+                if self.prontos:
+                    http(self.porta, "POST", "/resultados", {"resultados": self.prontos})
+                if self.fila:
+                    http(self.porta, "POST", "/devolver", {"ids": [t["id"] for t in self.fila]})
+            except Exception as ex:
+                self.escrever(u"não consegui devolver as tarefas: %s" % ex)
+            self.fila, self.prontos = [], []
+            self.escrever(u"Trabalhador parado (%s); a otimização segue nos outros Rhinos." % motivo)
+            self.finalizar(u"parado")
+            return
         if self.estado in ("rodando", "conectando"):
             try:
                 self.ultimo = http(self.porta, "POST", "/parar", {})
@@ -560,7 +631,11 @@ def executar():
         return dict(log=u"\n".join(laco.log), progresso=laco.estado)
     porta = _num(op, "porta", 8765, int)
     saida = {}
-    if _g("iniciar", False) and not rodando:
+    if _g("iniciar", False) and not rodando and op.get("modo", "").lower() == "trabalhador":
+        params, objs = genoma_de(comp)        # mesmos sliders do Rhino principal
+        laco = Laco(comp, op, None, params, objs)
+        sc.sticky[CHAVE] = laco
+    elif _g("iniciar", False) and not rodando:
         params, objs = genoma_de(comp)
         problema = _lista(_g("problema"))
         if not problema:

@@ -368,3 +368,12 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   `adicionar_pareto` do `montar_pareto.py`, carregado com `_SO_FUNCOES`): cada montador
   criava um documento novo e um "fechava" o outro. Conferido no Rhino 8 (2026-11-27):
   Pareto recarrega no fim da otimização e o `aplicar` leva a solução aos sliders.
+- Modo trabalhador (2026-11-27): vários Rhinos no mesmo PC dividem a geração. `modo =
+  trabalhador` no `opcoes`: não chama `/iniciar`, espera `estado` = gerando, confere os
+  nomes do genoma (`/estado` → `parametros`), pega tarefas da mesma fila e, no fim,
+  espera a próxima otimização até `parar`. Servidor: id das tarefas `rodada-geração-
+  índice` (resposta de otimização antiga é ignorada), `POST /devolver` (trabalhador que
+  para devolve as não feitas na hora; senão voltam em 120 s). `lote` padrão 16 → 4 (com
+  16 e população 48, dois Rhinos ficavam 32/16). Testado sem Rhino (`test_devolver_e_
+  rodada_antiga`); falta conferir com dois Rhinos. Esc é global (GetAsyncKeyState):
+  para todos; o botão `parar` para um só.

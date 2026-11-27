@@ -272,3 +272,33 @@ def test_sol_luz_pelo_protocolo_igual_ao_prototipo():
             assert np.allclose(a, b, atol=1.0), k
         else:
             assert np.allclose(a, b, rtol=1e-3, atol=1e-3), k
+
+
+# ---------------------------------------------------------------- trabalhadores
+def test_devolver_e_rodada_antiga(tmp_path):
+    """Trabalhador que para devolve as tarefas (voltam já para a fila); resposta de uma
+    otimização anterior (outra rodada no id) é ignorada; o estado traz os nomes."""
+    sv = Servico()
+    cfg = dict(parametros=ESPACO_TRELICA, problema=PROBLEMA_TRELICA, populacao=8, geracoes=1,
+               saida=str(tmp_path))
+    sv.iniciar(cfg)
+    velha = sv.otim.tarefas(2)["tarefas"]
+    sv.iniciar(cfg)                                    # nova rodada
+    otim = sv.otim
+    est = otim.estado_dict()
+    assert est["rodada"] == 2 and est["parametros"] == ["altura", "n_paineis", "secao"]
+    r = otim.resultados([dict(id=t["id"], geometria=geometria_trelica(t["parametros"]))
+                         for t in velha])
+    assert r["aceitos"] == 0                           # rodada 1: ignoradas
+    a = otim.tarefas(3)["tarefas"]                     # trabalhador A pega 3 e para
+    b = otim.tarefas(0)["tarefas"]                     # B pega o resto
+    assert otim.tarefas(0)["estado"] == "aguardar"     # nada pendente
+    assert otim.devolver([t["id"] for t in a])["devolvidas"] == 3
+    c = otim.tarefas(0)["tarefas"]                     # as de A voltam para B
+    assert sorted(t["id"] for t in c) == sorted(t["id"] for t in a)
+    otim.resultados([dict(id=t["id"], geometria=geometria_trelica(t["parametros"]))
+                     for t in b + c])
+    esperar(otim)
+    assert otim.estado == "fim"
+    assert otim.devolver([a[0]["id"]])["devolvidas"] == 0   # depois do fim: nada
+    sv.encerrar()

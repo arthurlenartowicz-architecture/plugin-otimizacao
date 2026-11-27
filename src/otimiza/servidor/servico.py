@@ -53,6 +53,7 @@ class Servico:
         self.trava = threading.RLock()
         self.climas: dict[str, tuple] = {}   # caminho do EPW → (Clima, Cache)
         self.otim: Otimizacao | None = None
+        self.rodadas = 0                     # nº de otimizações iniciadas (vai no id das tarefas)
 
     # ---------------------------------------------------------------- clima
     def clima(self, epw: str | None):
@@ -112,7 +113,9 @@ class Servico:
                 if not pedido.get("substituir", True):
                     raise pr.ErroProtocolo("já existe uma otimização em andamento")
                 self.otim.parar()
-            self.otim = Otimizacao(Config(pedido, self), self)
+            cfg = Config(pedido, self)
+            self.rodadas += 1
+            self.otim = Otimizacao(cfg, self, self.rodadas)
             return self.otim.estado_dict()
 
     def exigir(self) -> "Otimizacao":
@@ -170,12 +173,12 @@ class Config:
 
 
 class Otimizacao:
-    def __init__(self, cfg: Config, servico: Servico):
+    def __init__(self, cfg: Config, servico: Servico, rodada: int = 1):
         from otimiza.otimizacao.otimizador import Sessao
         d = cfg.dados
         if cfg.espaco is None or cfg.problema is None:
             raise pr.ErroProtocolo("/iniciar precisa de 'parametros' e 'problema'")
-        self.cfg, self.servico = cfg, servico
+        self.cfg, self.servico, self.rodada = cfg, servico, rodada
         self.trava = threading.RLock()
         p = cfg.problema
         self.sessao = Sessao(cfg.espaco, p.objetivos, [p.sentido(o) for o in p.objetivos],
@@ -235,7 +238,8 @@ class Otimizacao:
             if not dar:
                 saida["estado"] = "aguardar"
                 saida["motivo"] = "esperando outros clientes terminarem o lote"
-            saida["tarefas"] = [dict(id=f"{self.geracao}-{i}", parametros=self.lote[i]) for i in dar]
+            saida["tarefas"] = [dict(id=f"{self.rodada}-{self.geracao}-{i}", parametros=self.lote[i])
+                                for i in dar]
             return saida
 
     def resultados(self, lista: list[dict]) -> dict:
@@ -243,10 +247,7 @@ class Otimizacao:
         aceitos, erros = 0, []
         convertidos = []
         for r in lista:            # decodifica fora da trava (vários clientes ao mesmo tempo)
-            try:
-                g, i = (int(x) for x in str(r["id"]).split("-"))
-            except (KeyError, ValueError):
-                raise pr.ErroProtocolo(f"id de tarefa inválido: {r.get('id')!r}") from None
+            rod, g, i = self._id(r.get("id"))
             obj = None
             if r.get("geometria") is not None and not r.get("erro"):
                 try:
@@ -256,10 +257,11 @@ class Otimizacao:
                     erros.append(f"{r['id']}: {e}")
             elif r.get("erro"):
                 erros.append(f"{r['id']}: {r['erro']}")
-            convertidos.append((g, i, obj, r.get("tempo_s")))
+            convertidos.append((rod, g, i, obj, r.get("tempo_s")))
         with self.trava:
-            for g, i, obj, t in convertidos:
-                if self.estado != "gerando" or g != self.geracao or i in self.recebidos \
+            for rod, g, i, obj, t in convertidos:
+                if self.estado != "gerando" or (rod, g) != (self.rodada, self.geracao) \
+                        or i in self.recebidos \
                         or not 0 <= i < len(self.lote):
                     continue      # atrasada (geração anterior) ou repetida
                 self.recebidos[i] = obj
@@ -274,6 +276,29 @@ class Otimizacao:
             saida = self.estado_dict()
             saida.update(aceitos=aceitos, erros=erros)
             return saida
+
+    @staticmethod
+    def _id(texto) -> tuple:
+        """Id "rodada-geração-índice" → três inteiros."""
+        try:
+            rod, g, i = (int(x) for x in str(texto).split("-"))
+        except (TypeError, ValueError):
+            raise pr.ErroProtocolo(f"id de tarefa inválido: {texto!r}") from None
+        return rod, g, i
+
+    def devolver(self, ids: list) -> dict:
+        """Tarefas pegas e não feitas (cliente parou): voltam já para a fila."""
+        n = 0
+        with self.trava:
+            for texto in ids:
+                rod, g, i = self._id(texto)
+                if self.estado == "gerando" and (rod, g) == (self.rodada, self.geracao) \
+                        and i in self.atribuidos and i not in self.recebidos \
+                        and i not in self.pendentes:
+                    del self.atribuidos[i]
+                    self.pendentes.insert(0, i)
+                    n += 1
+            return dict(self.estado_dict(), devolvidas=n)
 
     # ---------------------------------------------------------------- GPU
     def _avaliar(self):
@@ -353,7 +378,8 @@ class Otimizacao:
 
     def estado_dict(self) -> dict:
         with self.trava:
-            d = dict(versao=pr.VERSAO, estado=self.estado,
+            d = dict(versao=pr.VERSAO, estado=self.estado, rodada=self.rodada,
+                     parametros=list(self.cfg.espaco.nomes),
                      geracao=getattr(self, "geracao", 0),
                      geracoes=self.sessao.info["geracoes"],
                      avaliacoes=sum(len(p) for p, _, _ in self.sessao.problema.registro),

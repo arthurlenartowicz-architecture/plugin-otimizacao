@@ -31,6 +31,7 @@ def _rotas(servico: Servico, desligar):
         ("POST", "/tarefas"): lambda d: servico.exigir().tarefas(int(d.get("maximo", 0))),
         ("POST", "/resultados"): lambda d: servico.exigir().resultados(d.get("resultados", [])),
         ("POST", "/parar"): lambda _: servico.exigir().parar(),
+        ("POST", "/devolver"): lambda d: servico.exigir().devolver(d.get("ids", [])),
         ("POST", "/avaliar"): servico.avaliar,
         ("POST", "/encerrar"): lambda _: (desligar(), dict(estado="encerrando"))[1],
     }
