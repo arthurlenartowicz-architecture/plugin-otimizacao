@@ -313,7 +313,8 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   `rhino/grasshopper/montar_pareto.py` monta `pareto.gh` com um GhPython
   (`pareto_rhino.py`, IronPython, lido do disco) que lê o resultado.json e
   mostra a solução escolhida (slider), a frente lado a lado e os parâmetros
-  (`valores` para sliders); botão `rodar` chama o Python da `.venv`. Testado fora
-  do Rhino com um Rhino.Geometry falso; falta conferir no Rhino. Os parâmetros
+  (`valores` para sliders); botão `rodar` chama o Python da `.venv`. Conferido no
+  Rhino 8 pelo usuário (2026-11-27): montagem, botão `rodar`, slider, tabela e
+  `todas` funcionando; `pareto.gh` versionado (pequeno, como o `validar_karamba.gh`). Os parâmetros
   ainda vêm dos protótipos em Python (geometria do Rhino como parâmetro fica
   para o plugin C#, Etapa 4).
