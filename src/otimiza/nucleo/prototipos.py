@@ -94,3 +94,15 @@ def predio(largura=6.0, profundidade=8.0, altura=3.0, janelas=None, origem=(0.0,
     v[:n_proj] = v[:n_proj] @ rot.T + torch.tensor([origem[0], origem[1], 0.0], dtype=torch.float64)
     var.vertices = v
     return var
+
+
+def predio_de(p: dict, **fixos) -> Variante:
+    """Gerador para o otimizador: chaves de `predio` ('largura', 'profundidade', 'altura',
+    'rotacao_graus', ...) mais 'janela_N', 'janela_L', 'janela_S', 'janela_O' (razão
+    janela/parede de cada fachada). `fixos` completa o que não for parâmetro (ex.: contexto)."""
+    q = {**fixos, **p}
+    janelas = dict(q.pop("janelas", None) or {})
+    for f in "NLSO":
+        if f"janela_{f}" in q:
+            janelas[f] = q.pop(f"janela_{f}")
+    return predio(janelas=janelas, **q)

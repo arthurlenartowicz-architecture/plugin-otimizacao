@@ -59,3 +59,31 @@ linha de comando). Depois:
 ```
 
 Se algo falhar, copie o painel de log (tem o erro completo).
+
+## Pareto (Etapa 3)
+
+1. Otimize (no PowerShell, na raiz do projeto):
+
+   ```powershell
+   .venv\Scripts\python.exe scripts\otimizar_exemplo.py trelica
+   ```
+
+   (ou `sala`, que precisa de um EPW em `data/epw`). Grava
+   `resultados/<caso>/resultado.json` e `resultados/<caso>/paralelas.png`
+   (coordenadas paralelas; linhas grossas = representante de cada cluster).
+
+2. Uma vez, no Rhino 8:
+
+   ```
+   _-RunPythonScript "C:\Users\PC\Documents\plugin-otimizacao\rhino\grasshopper\montar_pareto.py"
+   ```
+
+   Cria `pareto.gh` com um componente GhPython ("Pareto", código de
+   `pareto_rhino.py`, lido do disco), painel `caso`, botão `rodar` (roda o passo 1
+   pelo Python da `.venv`; o GH fica travado até acabar), slider `solucao`, toggle
+   `so_representantes` e painéis de log, parâmetros, objetivos e tabela.
+
+3. Saídas: `geometria` (solução escolhida: malha opaca + vidros, ou barras),
+   `vidros`, `todas` (a frente inteira lado a lado em x), `valores` (parâmetros
+   da solução, para ligar em sliders da sua definição) e `tabela`. As soluções vêm
+   em ordem do 1º objetivo: o slider percorre a frente de uma ponta à outra.

@@ -59,7 +59,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
     `estrutura` no contrato, testes analíticos.
   - [x] 2b · Validação contra o Karamba3D 3.1 (pórtico espacial e treliça
     espacial): deslocamentos, rotações, energia e esforços com erro ~1e-13.
-- [ ] 3. Otimizador + Pareto no Rhino → MVP do TCC
+- [x] 3. Otimizador + Pareto no Rhino → MVP do TCC
 - [ ] 4. Plugin C# completo + térmico, carbono/custo, programa
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
     - [ ] carga de resfriamento e aquecimento, kWh/ano 🟡 (modelo RC em lote
@@ -273,3 +273,46 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   E em kN/m²; resultados em m, kN, kN·m, rad. Nós do Karamba na mesma ordem
   dos nossos (1ª aparição nas barras). Gabarito versionado em
   `testes/referencias/karamba/karamba_<caso>.json`.
+- Etapa 3 (2026-11-27): pymoo 0.6.2 instalado (traz scipy, matplotlib; lock
+  atualizado). `nucleo/parametros.py`: `Continuo`, `Inteiro`, `Categorico`,
+  `Espaco`. O otimizador vê só u ∈ [0, 1] por parâmetro; inteiro/categórico =
+  faixas iguais de u (sem viés), e um Repair do pymoo leva os discretos ao centro
+  da faixa (mesmo projeto = mesmo vetor → duplicatas eliminadas). Operadores
+  padrão (SBX + mutação polinomial) para todos os tipos. Gerador = função
+  dict → Variante ou Estrutura; `cena_de` monta a CenaLote da população
+  (`prototipos.predio_de`, `estrutura.prototipos.trelica_pratt_de` + catálogo `TUBOS`).
+- Otimizador (`otimizacao/otimizador.py`): `otimizar(espaco, avaliador, nomes, ...)`,
+  avaliador = lista de dicts → (F para minimizar, violação), uma chamada por
+  geração; `avaliador_motor`/`otimizar_problema` ligam ao `motor.avaliar_problema`
+  (cache do clima mantido entre gerações). `auto` = NSGA-II até 3 objetivos,
+  NSGA-III com 4+ (direções de referência "energy", nº = população); RVEA opcional.
+  Restrição única G = violação. NaN/inf → F = 1e12 e violação 1e6 (inviável).
+  Todas as avaliações ficam no `Resultado`; a frente sai desse arquivo (viáveis,
+  sem repetidas, não dominadas), `F_final` = população final. `objetivos` volta
+  ao sentido original (max positivo).
+- Pareto (`otimizacao/pareto.py`): não dominadas (pymoo), IGD, hipervolume,
+  clusters k-means nos objetivos normalizados (representante = mais perto do
+  centro; numerados pelo 1º objetivo), coordenadas paralelas (PNG, objetivos +
+  parâmetros), `exportar` → `resultado.json` (soluções em ordem do 1º objetivo,
+  no máx. 200, com geometria) + `paralelas.png`.
+- Validação 3 (`testes/test_otimizacao.py`): ZDT1/2/3 (NSGA-II, 100 × 200): IGD
+  do arquivo ≤ 0,0022, da população ≤ 0,006. DTLZ2 (frente = esfera):
+  3 obj NSGA-II dist. à esfera 0,008, IGD 0,077; NSGA-III 0,0008 e IGD 0,0091
+  (ideal com 92 pontos 0,0083) → com 3 objetivos o NSGA-III espalha bem melhor
+  (o `auto` segue o plano, NSGA-II; usar `algoritmo="nsga3"` com 3 objetivos);
+  5 obj NSGA-III e RVEA no IGD ideal (0,1784 com 126 pontos). Treliça Pratt
+  (altura contínua, nº de painéis inteiro, tubo categórico; massa × flecha com
+  utilização ≤ 100%): NSGA-II com 400 avaliações chega a 100,05% do hipervolume
+  da busca exaustiva (735 projetos). sol_luz rápido (janelas + rotação, sDA × ASE)
+  como teste de integração.
+- Tempos: treliça 60 × 30 no nível padrão 0,5 s (a 1ª chamada da GPU num processo
+  novo leva ~11 s a mais: carga do cuSOLVER); sala com torre, 48 × 20, DA × UDI ×
+  ASE no nível rápido: ~10 s.
+- Rhino (MVP): `scripts/otimizar_exemplo.py <caso>` grava `resultados/<caso>/`;
+  `rhino/grasshopper/montar_pareto.py` monta `pareto.gh` com um GhPython
+  (`pareto_rhino.py`, IronPython, lido do disco) que lê o resultado.json e
+  mostra a solução escolhida (slider), a frente lado a lado e os parâmetros
+  (`valores` para sliders); botão `rodar` chama o Python da `.venv`. Testado fora
+  do Rhino com um Rhino.Geometry falso; falta conferir no Rhino. Os parâmetros
+  ainda vêm dos protótipos em Python (geometria do Rhino como parâmetro fica
+  para o plugin C#, Etapa 4).

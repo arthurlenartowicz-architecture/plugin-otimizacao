@@ -76,3 +76,17 @@ def trelica_espacial(nx: int = 4, ny: int = 3, modulo: float = 2.0, altura: floa
     return Estrutura.criar(nos, barras, secao or tubo_circular(0.1143, 0.004), trelica=True,
                            apoios={c: ARTICULADO for c in cantos}, cargas=cargas,
                            gravidade=gravidade)
+
+
+# catálogo de tubos (D × t em mm) para parâmetros categóricos de seção
+TUBOS = {f"RO{d:g}/{t:g}": tubo_circular(d / 1000, t / 1000)
+         for d, t in [(48.3, 3.2), (60.3, 3.2), (76.1, 3.2), (88.9, 4), (114.3, 4), (139.7, 5),
+                      (168.3, 6)]}
+
+
+def trelica_pratt_de(p: dict, **fixos) -> Estrutura:
+    """Gerador para o otimizador: dict com 'altura', 'n_paineis', 'secao' (nome em TUBOS)
+    e, opcionais, 'vao' e 'carga'. `fixos` completa o que não for parâmetro."""
+    q = {**fixos, **p}
+    secao = q.pop("secao", "RO114.3/4")
+    return trelica_pratt(secao=TUBOS[secao] if isinstance(secao, str) else secao, **q)
