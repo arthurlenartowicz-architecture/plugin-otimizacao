@@ -122,7 +122,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
     aba Cena e aba por módulo, componentes GH por módulo + Genes, aba de Otimização
     (escolha de 1 ou mais objetivos, GA/CMA-ES para 1, gráficos ao vivo), parâmetros nativos
     - Plano aprovado (2026-11-27). Cada subetapa: entrega · validação · conferência no Rhino.
-    - [ ] 4f1 · 1 objetivo: `auto` 1 → GA, 2 → NSGA-II, 3+ → NSGA-III; `algoritmo = cmaes`
+    - [x] 4f1 · 1 objetivo: `auto` 1 → GA, 2 → NSGA-II, 3+ → NSGA-III; `algoritmo = cmaes`
       (pacote `cma` 4.6.0 já instalado) só com todos os parâmetros contínuos (num categórico o
       CMA-ES supõe uma ordem que não existe). Com 1 objetivo a "frente" = o melhor projeto.
       Validação: esfera 10D (perto de 0 num orçamento fixo); Rastrigin 2D (ótimo global) e
@@ -635,7 +635,14 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
   Conferência no Rhino: `rhino/grasshopper/conferir_1objetivo.py` (monta a definição com
   Otimiza.gha, `max sol_luz.da`, caso `sala_1obj`, salva em `resultados/`) e
   `scripts/conferir_1objetivo.py` (lê o resultado.json, reavalia pelo protótipo, compara com a
-  busca aleatória e com a otimização de 3 objetivos). Falta rodar no Rhino para marcar a 4f1.
+  busca aleatória e com a otimização de 3 objetivos).
+- Conferido no Rhino 8 (2026-11-27, Otimiza.gha, sala de exemplo, `max sol_luz.da`, rápido,
+  48 × 20): algoritmo ga, 960 avaliações (937 geradas no GH), 28,3 s; 20 soluções distintas em
+  ordem; melhor = todas as janelas 80% (rotação −45°), DA 93,79. Reavaliadas pelo protótipo em
+  Python: |dif| máx 0,03 ponto (já com a semente por variante). Busca aleatória com o mesmo
+  orçamento 93,69; maior DA da otimização de 3 objetivos (sala_gh) 93,62. O DA máximo da sala é
+  um platô fácil (as 20 melhores têm DA 93,79): serve para conferir o fluxo, não para mostrar
+  vantagem do GA (isso está nos testes: Rastrigin, treliça).
 - Semente dos raios (achado na 4f1): o DA de um projeto dependia dos vizinhos de lote (a
   semente seguia a posição no lote). 192 salas, lote 192 × lotes de 48: rápido |dif| média 0,09,
   p95 0,30, máx 1,6 pontos; padrão 0,02 / 0,05 / 0,56. Corrigido: motores B e C usam como
