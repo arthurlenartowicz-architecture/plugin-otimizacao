@@ -32,7 +32,8 @@ ENTRADAS = [("arquivo", "caminho do resultado.json (opcional)"),
             ("rodar", "botão: roda a otimização (trava o GH até acabar)"),
             ("solucao", "índice da solução"),
             ("so_representantes", "só um por cluster"),
-            ("espacamento", "passo entre soluções em todas (m, 0 = automático)")]
+            ("espacamento", "passo entre soluções em todas (m, 0 = automático)"),
+            ("aplicar", "botão: põe a solução escolhida nos sliders do Otimizar")]
 SAIDAS = ["log", "parametros", "valores", "objetivos", "geometria", "vidros", "todas", "tabela"]
 
 
@@ -131,6 +132,9 @@ def montar():
     sl.NickName = "solucao"
     colocar(doc, sl, 220, 180)
     entrada["solucao"].AddSource(sl)
+    ap = colocar(doc, gh.Kernel.Special.GH_ButtonObject(), 340, 260)
+    ap.NickName = "aplicar"
+    entrada["aplicar"].AddSource(ap)
     tg = colocar(doc, gh.Kernel.Special.GH_BooleanToggle(), 300, 220)
     tg.NickName = "so_representantes"
     entrada["so_representantes"].AddSource(tg)
@@ -144,7 +148,7 @@ def montar():
     nota = painel(gh, doc,
                   "Rode antes (PowerShell): .venv\\Scripts\\python.exe scripts\\otimizar_exemplo.py trelica "
                   "(ou sala), ou aperte 'rodar'. O slider escolhe a solução; 'geometria' é a escolhida, "
-                  "'todas' mostra a frente lado a lado. 'valores' pode alimentar sliders da sua definição.",
+                  "'todas' mostra a frente lado a lado. 'aplicar' põe a solução nos sliders do Otimizar.",
                   "LEIA", 100, 280, 380, 90, True)
     gh.Instances.ActiveCanvas.Refresh()
     gh.Kernel.GH_DocumentIO(doc).SaveQuiet(SAIDA_GH)

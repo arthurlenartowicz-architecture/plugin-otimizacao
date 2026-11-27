@@ -87,3 +87,134 @@ Se algo falhar, copie o painel de log (tem o erro completo).
    `vidros`, `todas` (a frente inteira lado a lado em x), `valores` (parâmetros
    da solução, para ligar em sliders da sua definição) e `tabela`. As soluções vêm
    em ordem do 1º objetivo: o slider percorre a frente de uma ponta à outra.
+
+## Otimizar com a geometria do Grasshopper (Etapa 3b)
+
+O Grasshopper **gera** a geometria de cada variante; o Python **avalia** a geração
+inteira em lote na GPU e roda o otimizador (NSGA-II / NSGA-III). Os dois conversam por
+HTTP em `localhost`, com o protocolo descrito abaixo (o plugin C# da Etapa 4 troca só
+o lado do GH).
+
+1. Uma vez, no Rhino 8:
+
+   ```
+   _-RunPythonScript "C:\Users\PC\Documents\plugin-otimizacao\rhino\grasshopper\montar_otimizar.py"
+   ```
+
+   Cria `otimizar.gh`: a "Sala exemplo" (sala do protótipo em Breps, `sala_exemplo.py`),
+   5 sliders, o componente **Otimizar** (`otimizar_gh.py`, lido do disco), painéis
+   `problema` e `opcoes`, botões `iniciar` / `parar` / `avaliar`.
+   Rode também de novo o `montar_pareto.py` (o Pareto ganhou o botão `aplicar`).
+
+2. Na sua definição: copie o Otimizar com os painéis e ligue
+   - em `genoma`, os **sliders** (contínuo com as casas decimais do slider; inteiro se
+     o slider for Integer) e **Value Lists** (categórico, pelos nomes dos itens) que o
+     otimizador pode mexer. O nome do parâmetro é o NickName do slider;
+   - a geometria nas entradas por rótulo: `fachada`, `vidro`, `cobertura`, `piso`,
+     `interno` (projeto) e `contexto`, `entorno` (fixos: mandados uma vez só, não podem
+     depender do genoma). Brep, Mesh, Surface ou Extrusion, em qualquer unidade (a
+     escala vai para o servidor). Normais para fora. Malhas grandes em coordenadas
+     enormes (UTM) perdem precisão em float32: modele perto da origem;
+   - ou, para estrutura: `barras` (linhas/polilinhas), `apoios` e `cargas` (pontos),
+     `secao` (nome do catálogo `TUBOS`, uma ou uma por barra).
+
+3. `problema` (um objetivo ou restrição por linha):
+
+   ```
+   max sol_luz.da        objetivo com sentido escolhido
+   sol_luz.ase           objetivo no sentido padrão da métrica
+   sol_luz.udi >= 50     restrição
+   ```
+
+   A saída `metricas` lista tudo o que existe (unidade, sentido padrão).
+
+4. `opcoes` (`chave = valor`, todas opcionais):
+
+   | chave | padrão | |
+   |---|---|---|
+   | `caso` | gh | pasta `resultados/<caso>/` |
+   | `populacao`, `geracoes`, `semente` | 48, 20, 0 | |
+   | `algoritmo` | auto | nsga2 / nsga3 / rvea |
+   | `nivel` | rapido | rapido / padrao / validacao |
+   | `epw` | 1º de `data/epw` | caminho do clima |
+   | `malha` | minima | malha dos Breps: minima / rapida / padrao / qualidade (curvos: padrao) |
+   | `lote` | 16 | tarefas pedidas por vez |
+   | `mostrar` | nao | `sim` redesenha a vista a cada variante (mais lento) |
+   | `porta` | 8765 | |
+   | `rho_<rótulo>`, `tau_vidro` | os do HB | materiais |
+   | `apoio`, `forca`, `trelica`, `gravidade` | articulado, 0,0,-10, nao, 9.81 | estrutura (kN) |
+
+5. `avaliar` avalia só a variante atual (confere se a geometria chega certa) e grava
+   `testes/referencias/gh/variante_<caso>.json`. `iniciar` otimiza: o componente sobe o
+   servidor se preciso (janela de console; a 1ª vez leva ~20 s), e o laço roda num timer
+   da interface, em blocos de ~0,25 s (o Rhino continua respondendo; a vista não é
+   redesenhada). Progresso na mensagem do componente e na barra de status; **Esc** ou
+   `parar` interrompem (o que já foi avaliado é gravado). No fim os sliders voltam aos
+   valores originais e o `resultado.json` é gravado; no `pareto.gh` (`caso` igual),
+   escolha a solução e aperte `aplicar` para levá-la aos sliders.
+
+**Validação** (sala de exemplo × `prototipos.predio`): em `otimizar.gh`, deixe
+`caso = sala_gh`, aperte `avaliar` e rode
+
+```powershell
+.venv\Scripts\python.exe -m pytest testes\test_gh.py -v -s
+```
+
+Ele mostra as áreas por rótulo, as métricas do `sol_luz` (GH × protótipo) e o tempo do GH.
+
+**Vários Rhinos ao mesmo tempo:** o servidor é uma fila de tarefas. Outras instâncias do
+Rhino com a mesma definição podem pegar tarefas da otimização em andamento (modo
+"trabalhador", a fazer no C#; o protocolo já aceita). Tarefa sem resposta em 120 s volta
+para a fila.
+
+### Protocolo (versão 1)
+
+Servidor: `.venv\Scripts\python.exe -m otimiza.servidor [--porta 8765]` (com
+`PYTHONPATH=src`; o componente faz isso sozinho). HTTP/1.1 em `127.0.0.1`, corpo e
+resposta em JSON UTF-8. Erro: HTTP 400 (pedido errado) ou 500, com `{"erro": "..."}`.
+Todo pedido pode levar `"versao": 1`. NaN sai como `null`.
+
+**Arrays.** Vértices: `x y z` seguidos; faces: `i j k` seguidos (triângulos, índice a
+partir de 0). Cada array é uma lista JSON ou um texto **base64** de float32 (`f4`,
+vértices) / int32 (`i4`, faces) little-endian. Pela RhinoCommon:
+`Mesh.Vertices.ToFloatArray()` e `Mesh.Faces.ToIntArray(true)` + `Buffer.BlockCopy` +
+`Convert.ToBase64String`. `"tipo_vertices": "f8"` aceita float64.
+
+**Malhas por rótulo:** `{"fachada": malha | [malhas], "vidro": ..., ...}` com
+`malha = {"vertices", "faces"}`. Rótulos: fachada, vidro, cobertura, piso, interno,
+contexto, entorno.
+
+**Estrutura:** `{"barras": [x1 y1 z1 x2 y2 z2 ...], "secao": "RO114.3/4" | {"D","t"} |
+{"b","h"} | [uma por barra], "trelica": bool, "gravidade": 9.81, "material":
+{"E","G","rho","fy"}?, "apoios": [{"pontos": [...], "condicoes": "articulado" |
+"engaste" | "rolete_z" | [6 bools]}], "cargas": [{"pontos": [...], "forca": [3],
+"momento": [3]?}]}`. Nós = pontas das barras unidas a 0,1 mm; kN, kN·m; seção em m.
+
+**Geometria de uma variante:** `{"malhas": {...}}` ou `{"estrutura": {...}}`.
+
+| rota | corpo | resposta |
+|---|---|---|
+| `GET /estado` | | `estado` (livre, gerando, avaliando, fim, erro), `geracao`, `geracoes`, `lote`, `faltam`, `avaliacoes`, `no_cache`, `erro`, `arquivo`, tempos |
+| `GET /metricas` | | `{"metricas": {modulo: {metrica: {unidade, sentido, descricao}}}}` |
+| `POST /iniciar` | `parametros`, `problema`, `nivel`, `algoritmo`, `populacao`, `geracoes`, `semente`, `epw`, `escala`, `materiais`, `fixas`, `caso`, `saida`, `cliente`, `reatribuir_s` | estado (substitui a otimização anterior) |
+| `POST /tarefas` | `{"maximo": 16}` (0 = todas) | estado + `tarefas: [{"id", "parametros": {nome: valor}}]`; lista vazia = aguardar (GPU avaliando ou outro cliente terminando) |
+| `POST /resultados` | `{"resultados": [{"id", "geometria", "tempo_s"?} \| {"id", "erro"}]}` | estado + `aceitos`, `erros` |
+| `POST /parar` | | estado (grava o que já foi avaliado) |
+| `POST /avaliar` | `geometrias: [...]`, `metricas` ou `problema`, `nivel`, `epw`, `escala`, `materiais`, `fixas` | `{"valores": {"modulo.metrica": [...]}, "tempo_s"}` |
+| `POST /encerrar` | | desliga o servidor |
+
+- `parametros`: `[{"nome", "tipo": "continuo", "minimo", "maximo", "casas"?} |
+  {"nome", "tipo": "inteiro", "minimo", "maximo"} | {"nome", "tipo": "categorico",
+  "opcoes": [...]}]`. Com `casas`, o valor já vem arredondado como no slider.
+- `problema`: lista de linhas (formato do item 3) ou um texto só.
+- `escala`: unidade do modelo → metro (mm = 0,001). `materiais`: `{"fachada":
+  {"rho": 0.5}, "vidro": {"tau": 0.64}}`. `fixas`: `{"malhas": {"contexto": ...}}`,
+  juntadas a toda variante. `cliente`: qualquer JSON, gravado em
+  `resultado.json → info.cliente` (o GH guarda o GUID de cada slider para o `aplicar`).
+- Ciclo do cliente: `POST /iniciar` → repetir { `POST /tarefas` → gerar → `POST
+  /resultados` } até `estado` = `fim` ou `erro`. O `id` traz a geração (`"3-17"`):
+  resposta atrasada de outra geração é ignorada. Projetos já avaliados (mesmos valores)
+  não voltam como tarefa: o servidor reaproveita o resultado. Variante com `erro` ou
+  geometria inválida vira inviável (não para a otimização).
+- Saída: `resultados/<caso>/resultado.json` (formato da Etapa 3, lido pelo Pareto) e
+  `paralelas.png`, gravados no fim, no `parar` e em caso de erro.

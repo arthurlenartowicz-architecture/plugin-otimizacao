@@ -14,6 +14,9 @@ ENTRADAS (todas opcionais)
   solucao            índice da solução (na lista filtrada); passa do fim → volta ao início
   so_representantes  True = só a solução mais central de cada cluster
   espacamento        > 0: `todas` sai enfileirada em x com esse passo (m); 0 = automático
+  aplicar            botão: põe os parâmetros da solução escolhida nos sliders/Value Lists
+                     que geraram o resultado (componente Otimizar; achados pelo GUID em
+                     qualquer definição aberta)
 SAÍDAS
   log, parametros ("nome = valor"), valores (só os valores, para ligar em sliders),
   objetivos ("nome = valor"), geometria (solução escolhida: malhas ou linhas),
@@ -122,6 +125,41 @@ def _fmt(v):
     return ("%.4g" % v) if isinstance(v, float) else u"%s" % v
 
 
+def aplicar_solucao(dados, sol):
+    """Agenda (ScheduleSolution) a troca dos valores nos sliders que estavam no genoma."""
+    import System
+    import Grasshopper as gh
+    from Grasshopper.Kernel.Special import GH_NumberSlider
+    genoma = ((dados.get("info") or {}).get("cliente") or {}).get("genoma")
+    if not genoma:
+        return u"Este resultado não veio do componente Otimizar (sem sliders para aplicar)."
+    achados = 0
+    for d in list(gh.Instances.DocumentServer):
+        alvos = []
+        for g in genoma:
+            o = d.FindObject(System.Guid(g["guid"]), True)
+            if o is not None and g["nome"] in sol["parametros"]:
+                alvos.append((o, sol["parametros"][g["nome"]]))
+        if not alvos:
+            continue
+        achados += len(alvos)
+
+        def trocar(doc, alvos=alvos):
+            for o, v in alvos:
+                if isinstance(o, GH_NumberSlider):
+                    o.Slider.RaiseEvents = False
+                    o.SetSliderValue(System.Decimal(float(v)))
+                    o.Slider.RaiseEvents = True
+                else:
+                    for it in o.ListItems:
+                        it.Selected = (it.Name == u"%s" % v)
+                o.ExpireSolution(False)
+        d.ScheduleSolution(5, gh.Kernel.GH_Document.GH_ScheduleDelegate(trocar))
+    if not achados:
+        return u"Sliders do genoma não encontrados (abra a definição que otimizou)."
+    return u"Aplicados %d valores nos sliders." % achados
+
+
 def executar():
     caso = _g("caso", "trelica")
     linhas = []
@@ -159,6 +197,8 @@ def executar():
                      dados["n_avaliacoes"], dados["n_viaveis"], len(sols)))
     linhas.append(u"Solução %d (cluster %d%s)." % (i, s["cluster"],
                                                     ", representante" if s.get("representante") else ""))
+    if _g("aplicar", False):
+        linhas.append(aplicar_solucao(dados, s))
     return dict(log=u"\n".join(linhas),
                 parametros=[u"%s = %s" % (n, _fmt(s["parametros"][n])) for n in nomes_par],
                 valores=[s["parametros"][n] for n in nomes_par],

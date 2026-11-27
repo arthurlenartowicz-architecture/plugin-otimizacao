@@ -13,6 +13,7 @@ Todas as avaliações ficam guardadas (`Resultado.historico`); a frente de Paret
 """
 from __future__ import annotations
 
+import copy
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Sequence
@@ -20,7 +21,6 @@ from typing import Callable, Sequence
 import numpy as np
 from pymoo.core.problem import Problem
 from pymoo.core.repair import Repair
-from pymoo.optimize import minimize
 
 from otimiza.nucleo.parametros import Espaco, cena_de
 
@@ -124,29 +124,90 @@ def criar_algoritmo(nome: str, n_obj: int, populacao: int, espaco: Espaco, semen
     raise ValueError(f"algoritmo desconhecido: {nome!r} (use auto, nsga2, nsga3 ou rvea)")
 
 
+class Sessao:
+    """Otimização passo a passo (ask/tell), para quando quem avalia está fora do Python
+    (ex.: o Grasshopper gera a geometria; ver `otimiza.servidor`).
+
+        s = Sessao(espaco, nomes, sentidos)
+        while (params := s.pedir()) is not None:
+            s.responder(*avaliar(params))
+        r = s.resultado()
+
+    Mesma sequência do `pymoo.optimize.minimize` (infill → avaliação → advance): com a
+    mesma semente, dá o mesmo resultado do `otimizar`."""
+
+    def __init__(self, espaco: Espaco, nomes: Sequence[str], sentidos: Sequence[str] | None = None,
+                 algoritmo: str = "auto", populacao: int = 100, geracoes: int = 100,
+                 semente: int = 0, verbose: bool = False):
+        self.espaco = espaco
+        self.nomes = list(nomes)
+        n_obj = len(self.nomes)
+        self.sentidos = list(sentidos) if sentidos else ["min"] * n_obj
+        self.nome_alg, alg = criar_algoritmo(algoritmo, n_obj, populacao, espaco, semente)
+        self._pendente: tuple | None = None
+        self.problema = _ProblemaLote(espaco, lambda p: self._pendente, n_obj)
+        self.alg = copy.deepcopy(alg)
+        self.alg.setup(self.problema, termination=("n_gen", geracoes), seed=semente, verbose=verbose)
+        self.info = dict(populacao=populacao, geracoes=geracoes, semente=semente)
+        self._infills = None
+        self._t0 = time.perf_counter()
+        self.tempo = 0.0
+
+    @property
+    def geracao(self) -> int:
+        """Nº de lotes já respondidos (0 = população inicial)."""
+        return len(self.problema.registro)
+
+    def pedir(self) -> list[dict] | None:
+        """Parâmetros do próximo lote (o mesmo lote até ser respondido); None = acabou."""
+        if self._infills is None:
+            while self.alg.has_next():
+                pop = self.alg.infill()
+                if pop is not None and len(pop):
+                    self._infills = pop
+                    break
+                self.alg.advance()       # como no pymoo: sem infill, só avança
+            else:
+                self.tempo = time.perf_counter() - self._t0
+                return None
+        return self.espaco.decodificar(self._infills.get("X"))
+
+    def responder(self, F, violacao) -> None:
+        """Objetivos (N, m) para minimizar e violação (N,) do lote pedido."""
+        if self._infills is None:
+            raise RuntimeError("responder sem pedir antes")
+        self._pendente = (F, violacao)
+        self.alg.evaluator.eval(self.problema, self._infills, algorithm=self.alg)
+        self.alg.advance(infills=self._infills)
+        self._infills, self._pendente = None, None
+        self.tempo = time.perf_counter() - self._t0
+
+    def resultado(self) -> Resultado:
+        """Todas as avaliações feitas até agora (pode chamar antes do fim)."""
+        params, Fs, viols, gens = [], [], [], []
+        for g, (p, f, v) in enumerate(self.problema.registro):
+            params += p
+            Fs.append(f)
+            viols.append(v)
+            gens.append(np.full(len(p), g))
+        m = len(self.nomes)
+        cat = (lambda xs, forma: np.concatenate(xs) if xs else np.zeros(forma))
+        pop = self.alg.pop
+        return Resultado(self.espaco, self.nomes, self.sentidos, params, cat(Fs, (0, m)),
+                         cat(viols, (0,)), cat(gens, (0,)).astype(int), self.tempo, self.nome_alg,
+                         None if pop is None else pop.get("F"),
+                         dict(self.info, avaliacoes=len(params)))
+
+
 def otimizar(espaco: Espaco, avaliador: Avaliador, nomes: Sequence[str],
              sentidos: Sequence[str] | None = None, algoritmo: str = "auto",
              populacao: int = 100, geracoes: int = 100, semente: int = 0,
              verbose: bool = False) -> Resultado:
     """Roda o algoritmo e devolve todas as avaliações (ver `Resultado.frente`)."""
-    nomes = list(nomes)
-    n_obj = len(nomes)
-    sentidos = list(sentidos) if sentidos else ["min"] * n_obj
-    nome_alg, alg = criar_algoritmo(algoritmo, n_obj, populacao, espaco, semente)
-    prob = _ProblemaLote(espaco, avaliador, n_obj)
-    t0 = time.perf_counter()
-    res = minimize(prob, alg, ("n_gen", geracoes), seed=semente, verbose=verbose)
-    tempo = time.perf_counter() - t0
-    params, Fs, viols, gens = [], [], [], []
-    for g, (p, f, v) in enumerate(prob.registro):
-        params += p
-        Fs.append(f)
-        viols.append(v)
-        gens.append(np.full(len(p), g))
-    return Resultado(espaco, nomes, sentidos, params, np.concatenate(Fs), np.concatenate(viols),
-                     np.concatenate(gens), tempo, nome_alg, res.pop.get("F"),
-                     dict(populacao=populacao, geracoes=geracoes, semente=semente,
-                          avaliacoes=len(params)))
+    s = Sessao(espaco, nomes, sentidos, algoritmo, populacao, geracoes, semente, verbose)
+    while (params := s.pedir()) is not None:
+        s.responder(*avaliador(params))
+    return s.resultado()
 
 
 def avaliador_motor(gerador: Callable[[dict], object], problema, nivel: str = "padrao",

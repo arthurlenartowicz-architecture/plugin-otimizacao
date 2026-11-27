@@ -27,13 +27,23 @@ class Continuo:
     nome: str
     minimo: float
     maximo: float
+    casas: int | None = None   # casas decimais (slider do GH): valor sai arredondado
 
     def __post_init__(self):
         if not self.maximo > self.minimo:
             raise ValueError(f"{self.nome}: máximo deve ser maior que o mínimo")
 
     def decodificar(self, u: np.ndarray) -> list:
-        return list(self.minimo + np.clip(u, 0, 1) * (self.maximo - self.minimo))
+        v = self.minimo + np.clip(u, 0, 1) * (self.maximo - self.minimo)
+        if self.casas is not None:
+            v = np.clip(np.round(v, self.casas), self.minimo, self.maximo)
+        return list(v)
+
+    def centro(self, u: np.ndarray) -> np.ndarray:
+        """u do valor arredondado (mesmo valor → mesmo vetor)."""
+        if self.casas is None:
+            return np.clip(u, 0, 1)
+        return np.array([self.codificar(v) for v in self.decodificar(u)])
 
     def codificar(self, valor) -> float:
         return float(np.clip((valor - self.minimo) / (self.maximo - self.minimo), 0, 1))
@@ -118,10 +128,11 @@ class Espaco:
         return np.array([[p.codificar(v[p.nome]) for p in self.parametros] for v in lista])
 
     def arredondar(self, U: np.ndarray) -> np.ndarray:
-        """Discretos no centro da faixa; contínuos só limitados a [0, 1]."""
+        """Discretos no centro da faixa; contínuos com `casas` no valor arredondado;
+        os demais só limitados a [0, 1]."""
         U = np.clip(np.array(U, dtype=float), 0, 1)
         for j, p in enumerate(self.parametros):
-            if isinstance(p, _Discreto):
+            if isinstance(p, _Discreto) or getattr(p, "casas", None) is not None:
                 U[:, j] = p.centro(U[:, j])
         return U
 
@@ -135,7 +146,8 @@ class Espaco:
         saida = []
         for p in self.parametros:
             if isinstance(p, Continuo):
-                saida.append(dict(nome=p.nome, tipo="continuo", minimo=p.minimo, maximo=p.maximo))
+                saida.append(dict(nome=p.nome, tipo="continuo", minimo=p.minimo, maximo=p.maximo,
+                                  casas=p.casas))
             elif isinstance(p, Inteiro):
                 saida.append(dict(nome=p.nome, tipo="inteiro", minimo=p.minimo, maximo=p.maximo))
             else:

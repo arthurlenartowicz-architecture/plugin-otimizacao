@@ -90,8 +90,9 @@ def sensores_de_malha(
     normal_f, area_f = normais_e_areas(vertices, faces)
     a, b, c = (vertices[faces[:, i]] for i in range(3))
     aresta = torch.stack([(b - a).norm(dim=1), (c - b).norm(dim=1), (a - c).norm(dim=1)], 1).amax(1)
+    # folga relativa de 1e-6: 6,0000001 (ruído de float, ex.: geometria do GH em mm) dá 6, não 7
     n_div = torch.ceil(torch.maximum(area_f.sqrt() / espacamento,
-                                     aresta / (3 * espacamento))).clamp(min=1).long()
+                                     aresta / (3 * espacamento)) * (1 - 1e-6)).clamp(min=1).long()
 
     pontos, face_idx, area = [], [], []
     # agrupa triângulos com o mesmo n para fazer tudo em lote

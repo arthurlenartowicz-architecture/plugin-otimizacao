@@ -60,6 +60,8 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   - [x] 2b · Validação contra o Karamba3D 3.1 (pórtico espacial e treliça
     espacial): deslocamentos, rotações, energia e esforços com erro ~1e-13.
 - [x] 3. Otimizador + Pareto no Rhino → MVP do TCC
+  - [ ] 3b · Parâmetros e geometria do Grasshopper (servidor + componente Otimizar);
+    falta conferir no Rhino (`avaliar` + `test_gh.py`, tempo por variante no GH)
 - [ ] 4. Plugin C# completo + térmico, carbono/custo, programa
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
     - [ ] carga de resfriamento e aquecimento, kWh/ano 🟡 (modelo RC em lote
@@ -318,3 +320,35 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   `todas` funcionando; `pareto.gh` versionado (pequeno, como o `validar_karamba.gh`). Os parâmetros
   ainda vêm dos protótipos em Python (geometria do Rhino como parâmetro fica
   para o plugin C#, Etapa 4).
+- Etapa 3b (2026-11-27): **GH gera, Python avalia.** `otimizacao.Sessao` = ask/tell do
+  pymoo (infill → avaliar → advance, mesma sequência do `minimize`: resultado idêntico
+  com a mesma semente); `otimizar()` virou um laço sobre ela. `Continuo.casas` (casas
+  do slider): valor decodificado já arredondado e o reparo leva u ao valor arredondado
+  (parâmetro gravado = geometria avaliada; repetidos somem).
+- Servidor (`src/otimiza/servidor/`): `protocolo.py` (JSON ↔ Espaco, Problema em texto
+  "max x.y" / "x.y <= v", Variante por rótulo, Estrutura por linhas + pontos),
+  `servico.py` (fila de tarefas + thread única da GPU), `rede.py` (`ThreadingHTTPServer`
+  em 127.0.0.1:8765, só stdlib). Escolhas para não haver gargalo: geometria em base64
+  float32/int32 (sai direto do `ToFloatArray`/`ToIntArray` da RhinoCommon, sem laço em
+  IronPython); contexto/entorno mandados uma vez (`fixas`) e fora do resultado.json;
+  projetos repetidos saem do cache (não voltam ao GH); fila com reatribuição (120 s)
+  para vários Rhinos/Compute no futuro sem mudar o protocolo; avaliação na thread da
+  GPU enquanto o HTTP responde "aguardar". Medido (sala, rápido, DA+UDI+ASE): HTTP +
+  decodificação 0,18 ms/variante, GPU 6,6 ms/variante → o custo fica no recálculo do GH.
+- Componente Otimizar (`otimizar_gh.py`, IronPython lido do disco; `montar_otimizar.py`
+  → `otimizar.gh` com a `sala_exemplo.py`): genoma = sliders (Integer → inteiro,
+  Even/Odd → categórico, demais → contínuo com casas) e Value Lists (nomes). Laço num
+  `Eto.Forms.UITimer` (fora do SolveInstance, blocos de 0,25 s): seta os sliders com
+  `RaiseEvents = False` + `ExpireSolution(False)`, `NewSolution(False)`, e o próprio
+  componente captura a geometria no seu SolveInstance (modo captura). Vista sem redraw
+  durante o laço; Esc/parar gravam o parcial; no fim restaura os sliders. Breps malhados
+  com `MeshingParameters.Minimal` (planos: poucos triângulos; os sensores vêm da nossa
+  subdivisão). Pareto ganhou `aplicar` (acha os sliders pelo GUID em `info.cliente`).
+- Grade de sensores: `ceil(√área/espaçamento)` com folga relativa de 1e-6 (6,0000001 de
+  ruído de float, ex.: geometria em mm, dava 7 divisões e mudava a ASE). Todos os
+  testes de validação seguem iguais.
+- Testes 3b: `test_servidor.py` (protocolo; dois clientes falsos por HTTP na mesma fila;
+  servidor = `otimizar_problema` direto, mesma semente; erro de geometria → inviável;
+  sala pelo protocolo em mm com contexto em `fixas` = protótipo nas 6 métricas do
+  sol_luz) e `test_gh.py` (sala exportada pelo `avaliar` do GH × `predio_de`; pulado até
+  o usuário rodar no Rhino).
