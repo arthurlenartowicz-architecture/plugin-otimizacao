@@ -5,7 +5,8 @@ Como usar (uma vez): no Rhino 8, digite na linha de comando
 
     _-RunPythonScript "C:\\Users\\PC\\Documents\\plugin-otimizacao\\rhino\\grasshopper\\montar_karamba.py"
 
-Cria um documento novo com UM componente GhPython (código de karamba_validar.py),
+Cria um documento novo com UM componente GhPython (que carrega karamba_validar.py
+do disco a cada execução),
 um painel com a pasta dos casos, um botão "rodar" e um painel de log, e salva
 rhino/grasshopper/validar_karamba.gh. Nenhum componente do Karamba é colocado
 no canvas e nada é calculado na montagem: o modelo só é montado e analisado
@@ -81,7 +82,15 @@ def criar_ghpython(gh, doc, x, y):
     comp.Params.RegisterOutputParam(p, comp.Params.Output.Count)
     comp.Params.OnParametersChanged()
     comp.VariableParameterMaintenance()
-    codigo = System.IO.File.ReadAllText(CODIGO, System.Text.Encoding.UTF8)  # acentos certos no IronPython
+    # o componente lê karamba_validar.py do disco a cada execução: correções no arquivo
+    # valem sem montar a definição de novo
+    codigo = (
+        "# Carrega o código atual de karamba_validar.py (não edite aqui; edite o arquivo)\n"
+        "import io\n"
+        "_arq = r\"" + CODIGO + "\"\n"
+        "_src = io.open(_arq, encoding='utf-8').read().replace('# -*- coding: utf-8 -*-', '')\n"
+        "exec(compile(_src, _arq, 'exec'))\n"
+    )
     try:
         comp.Code = codigo
     except Exception as e:

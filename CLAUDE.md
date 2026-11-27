@@ -252,9 +252,13 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   `Model.AssembleModel(..., points=nós)`, `Algorithms.Analyze.solve(m, ["LC0"])`,
   `Results.NodeDisplacements.solve`, `Results.BeamForces.solve(..., ts)`,
   `Algorithms.Buckling.solve(m, 1, 3, 300, 1e-7, 1)`. Saídas com out em
-  IronPython: tupla (finais) ou `clr.Reference` (no meio). O script confere a
-  unidade da seção pela massa. O teste casa nós por posição, deduz unidades e
-  usa as áreas de cisalhamento (Ay, Az) informadas pelo Karamba.
+  IronPython: tupla (finais) ou `clr.Reference` (no meio). Seção sempre em cm
+  (a troca automática para m pela massa errou na 1ª rodada: seção 10⁴ menor).
+  O json do IronPython quebra com acentos (arquivo saía cortado): textos são
+  passados para ASCII antes de gravar. O componente do `.gh` só carrega o
+  `karamba_validar.py` do disco (correções valem sem remontar). Licença do
+  usuário: lic_student. O teste casa nós por posição, deduz unidades e usa as
+  áreas de cisalhamento (Ay, Az) informadas pelo Karamba.
 - Deformação por cortante (Timoshenko) opcional no nosso elemento: `Secao.Ay/Az`
   (0 = Euler-Bernoulli, o padrão), φ = 12EI/(G·As·L²). O Karamba usa Timoshenko;
   no pórtico de teste isso muda o deslocamento em ~0,7%. Kg (flambagem) continua

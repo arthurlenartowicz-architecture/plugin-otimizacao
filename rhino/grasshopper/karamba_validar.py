@@ -38,7 +38,7 @@ def _referenciar():
     """Carrega o KarambaCommon (já carregado se o Karamba abriu no Grasshopper)."""
     try:
         clr.AddReference("KarambaCommon")
-        return "KarambaCommon já carregado"
+        return "KarambaCommon ja carregado"
     except Exception:
         pass
     base = os.path.join(os.environ["APPDATA"], "McNeel", "Rhinoceros", "packages", "8.0", "Karamba3D")
@@ -100,6 +100,19 @@ def _aninhado(x, prof=0):
         return [_aninhado(v, prof + 1) for v in x]
     except TypeError:
         return _num(x)
+
+
+def _ascii(x):
+    """Tira acentos de todos os textos: o json do IronPython quebra com caracteres não ASCII
+    (e deixava o arquivo cortado no meio)."""
+    import unicodedata
+    if isinstance(x, dict):
+        return dict((_ascii(k), _ascii(v)) for k, v in x.items())
+    if isinstance(x, list):
+        return [_ascii(v) for v in x]
+    if isinstance(x, str):
+        return "".join(c for c in unicodedata.normalize("NFKD", x) if ord(c) < 128)
+    return x
 
 
 def _lista(tipo, itens):
@@ -168,16 +181,13 @@ def _massa_esperada(d):
 
 
 def _analisar(d, msgs):
+    # CircularHollow recebe diâmetro e espessura em cm (padrão 11,43 × 0,4). Na 1ª rodada a
+    # troca automática para m pela massa errou (a seção ficou 10⁴ vezes menor): agora é fixo.
+    modelo, massa, cs, aco = _montar(d, 100.0, msgs)
     esperada = _massa_esperada(d)
-    # a seção do Karamba é em cm; se a massa sair 10⁴ vezes maior, tenta em m
-    for escala, unidade in ((100.0, "cm"), (1.0, "m")):
-        modelo, massa, cs, aco = _montar(d, escala, msgs)
-        razao = massa / esperada if esperada else 0
-        msgs.append("  seção em %s: massa Karamba %.2f kg, esperada %.2f (razão %.4f)"
-                    % (unidade, massa, esperada, razao))
-        if 0.9 < razao < 1.1:
-            break
-    saida = {"nome": d["nome"], "massa": massa, "unidade_secao": unidade,
+    msgs.append("  massa Karamba %.4f, esperada %.2f kg (razao %.4f)"
+                % (massa, esperada, massa / esperada if esperada else 0))
+    saida = {"nome": d["nome"], "massa": massa, "unidade_secao": "cm",
              "versao_karamba": str(Karamba.Licenses.License.version()),
              "origem_dll": ORIGEM}
     try:
@@ -256,8 +266,9 @@ def executar(pasta_kr):
         try:
             saida = _analisar(d, msgs)
             destino = os.path.join(pasta_kr, "karamba_%s.json" % d["nome"])
+            texto = json.dumps(_ascii(saida))     # monta o texto inteiro antes de abrir o arquivo
             with open(destino, "w") as f:
-                json.dump(saida, f)
+                f.write(texto)
             msgs.append("  gravado %s (desloc. máx. %s, flambagem %s)"
                         % (os.path.basename(destino), saida.get("desloc_max"), saida.get("flambagem")))
         except Exception:
