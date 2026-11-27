@@ -9,6 +9,9 @@ material. Rótulos usados pelos módulos:
   interno   outras superfícies internas (só refletem)
   contexto  entorno existente (faz sombra, não é avaliado)
   entorno   entorno sensível (sensores de perda de sol: vizinhos, praças)
+
+O módulo estrutura usa `estruturas` (modelo de barras de cada variante), à
+parte da malha; uma cena só de estrutura pode ter `variantes=[]` e clima None.
 """
 from __future__ import annotations
 
@@ -16,7 +19,6 @@ from dataclasses import dataclass, field
 
 import torch
 
-from otimiza.modulos.sol_luz.motor_b import Materiais
 from otimiza.nucleo.clima import Clima
 from otimiza.nucleo.raios import Cena, dispositivo_padrao
 
@@ -44,12 +46,13 @@ class CenaLote:
     variantes: list[Variante]
     clima: Clima
     device: str = field(default_factory=dispositivo_padrao)
+    estruturas: list | None = None   # uma Estrutura (modulos.estrutura.fem) por variante
     _cena: Cena | None = None
     _sem_projeto: Cena | None = None
 
     @property
     def n(self) -> int:
-        return len(self.variantes)
+        return len(self.variantes) if self.variantes else len(self.estruturas or [])
 
     def raios(self) -> Cena:
         """Cena de raios com todas as variantes (construída uma vez)."""
@@ -72,7 +75,9 @@ class CenaLote:
             self._sem_projeto = Cena(malhas, self.device)
         return self._sem_projeto
 
-    def materiais(self) -> Materiais:
+    def materiais(self):
+        from otimiza.modulos.sol_luz.motor_b import Materiais  # aqui para evitar import circular
+
         return Materiais.de_listas([(v.refletancia, v.transmitancia) for v in self.variantes])
 
     def faces_com(self, i: int, *rotulos: str) -> torch.Tensor:

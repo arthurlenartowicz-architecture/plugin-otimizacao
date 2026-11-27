@@ -36,3 +36,16 @@ e `exportar`.
 ```powershell
 .venv\Scripts\python.exe -m pytest testes\test_ladybug.py -v -s
 ```
+
+## Karamba (Etapa 2)
+
+A montagem também cria, para cada caso de `testes/referencias/karamba/`
+(`portico`, `trelica`), o "Caso Karamba", os componentes do Karamba e o
+"Empacotar Karamba", ligado à entrada `karamba` do exportador. Antes de
+exportar, confira no canvas (painel "LEIA Karamba"): condições do Support
+(pórtico: engaste; treliça: só x, y, z), Loads do tipo carga pontual, e
+parâmetros que não ligaram (avisos na linha de comando do Rhino). Depois:
+
+```powershell
+.venv\Scripts\python.exe -m pytest testes\test_karamba.py -v -s
+```

@@ -28,6 +28,7 @@ Python 3, ou o GhPython antigo; funciona nos dois). Crie estas ENTRADAS
   modelo_hb_ofusc HB Model  (opcional) sala com a grade de vistas (1e)
   hb_ga          float      (lista, opcional) GA do HB Imageless Annual Glare
   hb_ofusc_resultados str   (opcional) pasta de resultados do HB Imageless Annual Glare
+  karamba        str        (lista, opcional) JSON de cada caso do Karamba (empacotar_karamba.py)
   exportar       bool       ligue a um Button
 
 SAÍDA:  log
@@ -38,6 +39,7 @@ Arquivos gravados em <pasta>/<caso>/ (tudo em metros):
   sol_ladybug.json               posição do sol do Ladybug nas 8760 horas (meio da hora)
   ceu_ladybug.json               vetores dos patches Tregenza/Reinhart do Ladybug
   resultado_<nome>.json          valores do Ladybug por sensor
+  ../karamba/karamba_<caso>.json resultados do Karamba (sempre em <pasta>/karamba/)
 """
 import json
 import os
@@ -343,6 +345,18 @@ def executar():
         except Exception as e:
             msgs.append("hb_ofusc_resultados: falhou (" + str(e) + ")")
 
+    for txt in karamba or []:
+        if not txt:
+            continue
+        try:
+            d = json.loads(str(txt))
+            pasta_kr = os.path.join(pasta, "karamba")
+            if not os.path.isdir(pasta_kr):
+                os.makedirs(pasta_kr)
+            msgs.append("karamba/" + _gravar(os.path.join(pasta_kr, "karamba_%s.json" % d["nome"]), d))
+        except Exception as e:
+            msgs.append("karamba: falhou (" + str(e) + ")")
+
     if resultados:
         if pontos and len(resultados) != len(pontos):
             return "ERRO: 'resultados' e 'pontos' têm tamanhos diferentes."
@@ -358,7 +372,7 @@ for _nome in ["contexto", "pontos", "normais", "epw", "resultados", "nome_result
               "matriz_ceu", "malha_lb", "deslocamento", "radiacao", "radiacao_sem_solo",
               "horas_sol", "vetores_sol", "hoys_sol", "modelo_hb", "hb_da", "hb_udi",
               "hb_udi_baixo", "hb_udi_alto", "hb_df", "hb_resultados", "modelo_hb_ofusc",
-              "hb_ga", "hb_ofusc_resultados"]:
+              "hb_ga", "hb_ofusc_resultados", "karamba"]:
     if _nome not in globals():
         globals()[_nome] = None
 

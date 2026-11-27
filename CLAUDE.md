@@ -55,6 +55,10 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
     rápido, padrão e validação, e um benchmark de quantas variantes por segundo
     a 5070 aguenta.
 - [ ] 2. Estrutura: FEM de barras em lote (validar contra o Karamba)
+  - [x] 2a · FEM de barras (treliça e pórtico 3D) em lote na GPU, módulo
+    `estrutura` no contrato, testes analíticos.
+  - [ ] 2b · Validação contra o Karamba (definição montada; falta exportar
+    e rodar `testes/test_karamba.py`).
 - [ ] 3. Otimizador + Pareto no Rhino → MVP do TCC
 - [ ] 4. Plugin C# completo + térmico, carbono/custo, programa
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
@@ -208,3 +212,39 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 - Referências do Ladybug: `rhino/grasshopper/montar_definicao.py` monta a
   definição no GH; os JSON ficam em `testes/referencias/<caso>/` (versionados,
   são o gabarito dos testes).
+- Estrutura (2a, `modulos/estrutura/fem.py`): unidades kN, m (massa kg,
+  tensões kN/m²). Pórtico de Euler-Bernoulli 12 GL e treliça (só axial; não
+  subdividida; rotações de nós só de treliça travadas). Eixos locais como o
+  Karamba (a conferir): x = i→j, y = Z × x, z = x × y; barra vertical: z = X.
+  Cargas: nodais, distribuída uniforme global por barra (cargas equivalentes
+  consistentes) e peso próprio ρ·g·A (`gravidade` em m/s², 0 = sem). Um caso
+  de carga. Lote: variantes completadas até o mesmo nº de GL (GL extras e
+  apoios por eliminação), K denso float64 por scatter, Cholesky em lote
+  (`torch.linalg`), divide em lotes para caber na memória (1,5 GB). Mecanismo
+  (pivô < 1e-11 · máx. diagonal) → NaN. Flambagem linear: K φ = λ(−Kg) φ com
+  Kg cúbica (N médio do elemento), maior autovalor de L⁻¹(−Kg)L⁻ᵀ via `eigvalsh`.
+  Utilização = máx. (|N|/A + flexão elástica)/fy em 5 pontos por elemento
+  (tubo: √(My²+Mz²)/W; retângulo: soma) — sem flambagem local/EC3.
+  Níveis: barras de pórtico em 1 / 2 / 4 elementos (rápido/padrão/validação);
+  nos nós o resultado é exato com qualquer subdivisão.
+- `CenaLote.estruturas`: uma `Estrutura` por variante, à parte da malha (cena só
+  de estrutura: `variantes=[]`, `clima=None`). Import de `Materiais` em
+  `cena.py` passou a ser local (evita import circular).
+- Métricas do `estrutura`: deslocamento_max (cm), energia (kN·m), massa (kg),
+  utilizacao (%), flambagem (fator, max). Testes analíticos (`test_fem.py`):
+  console (ponta, axial, torção, peso próprio), biapoiada com distribuída,
+  treliças (tripé, triângulo), Euler (console e biarticulado, n_sub 8: < 1e-4),
+  equilíbrio, mecanismo, lote = individual.
+- Benchmark 2a (256 variantes, RTX 5070): pórtico 16 nós ~7800 variantes/s
+  (rápido), ~4200/s (padrão); treliça 42 nós ~5200/s; com flambagem ~200/s
+  (o `eigvalsh` em lote domina; se pesar, trocar por iteração de subespaço).
+- Validação Karamba (2b): casos em `testes/referencias/karamba/entrada_<caso>.json`
+  (`scripts/gerar_casos_karamba.py`; pórtico espacial 2 pav. engastado e malha
+  espacial 4×3 articulada nos cantos; tubo RO114.3/4 e S235, padrões do
+  Karamba; só cargas nodais). No GH: "Caso Karamba" (`caso_karamba.py`) lê o
+  JSON → componentes do Karamba achados por nome → "Empacotar Karamba"
+  (`empacotar_karamba.py`) → entrada `karamba` do exportador → grava
+  `karamba/karamba_<caso>.json`. A API de script do Karamba não foi usada
+  (guia oficial fora do ar); condições do Support e tipo do Loads podem
+  precisar de ajuste à mão. O teste deduz as unidades (m/cm/mm) e compara
+  esforços por |N| e momento resultante máximos por barra.
