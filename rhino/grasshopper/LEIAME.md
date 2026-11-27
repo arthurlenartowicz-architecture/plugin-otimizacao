@@ -229,7 +229,8 @@ contexto, entorno.
   "opcoes": [...]}]`. Com `casas`, o valor já vem arredondado como no slider.
 - `problema`: lista de linhas (formato do item 3) ou um texto só.
 - `escala`: unidade do modelo → metro (mm = 0,001). `materiais`: `{"fachada":
-  {"rho": 0.5}, "vidro": {"tau": 0.64}}`. `fixas`: `{"malhas": {"contexto": ...}}`,
+  {"rho": 0.5}, "vidro": {"tau": 0.64, "fs": 0.42}}` (`fs` = fator solar, usado no
+  `termico.ganho_solar`). `fixas`: `{"malhas": {"contexto": ...}}`,
   juntadas a toda variante. `cliente`: qualquer JSON, gravado em
   `resultado.json → info.cliente` (o GH guarda o GUID de cada slider para o `aplicar`).
 - Ciclo do cliente: `POST /iniciar` → repetir { `POST /tarefas` → gerar → `POST

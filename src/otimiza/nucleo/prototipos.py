@@ -11,6 +11,7 @@ from otimiza.nucleo.cena import CODIGO, Variante
 RHO = {"fachada": 0.5, "interno": 0.5, "piso": 0.2, "cobertura": 0.8, "contexto": 0.35,
        "entorno": 0.2, "vidro": 0.0}
 TAU_VIDRO = 0.64
+FS_VIDRO = 0.42  # fator solar do Generic Double Pane do Honeybee (τ 0,64)
 
 
 def _retangulo(p0, u, v):

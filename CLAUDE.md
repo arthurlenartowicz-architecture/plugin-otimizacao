@@ -63,6 +63,10 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   - [x] 3b · Parâmetros e geometria do Grasshopper (servidor + componente Otimizar);
     conferido no Rhino 8 (validação, otimização e `aplicar` do Pareto)
 - [ ] 4. Plugin C# completo + térmico, carbono/custo, programa
+  - Plano aprovado (2026-11-27): 4a térmico 🟢 → 4b modelo RC (cargas, EUI, conforto,
+    balanço zero; validar contra EnergyPlus via honeybee_energy) → 4c plugin C# (troca só o
+    `otimizar_gh.py`, mesmo protocolo v1; precisa do .NET 8 SDK) → 4d carbono/custo → 4e programa.
+  - [x] 4a · térmico 🟢: compacidade, WWR, ganho solar, UTCI (módulo `termico`)
   - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
     - [ ] carga de resfriamento e aquecimento, kWh/ano 🟡 (modelo RC em lote
       por zona; ganhos solares vêm do `sol_luz`)
@@ -70,12 +74,12 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
       + iluminação usando a autonomia de luz natural do `sol_luz` + equipamentos)
     - [ ] conforto interno 🟡: graus-hora / horas de desconforto, conforto
       adaptativo (ASHRAE 55 / EN 16798), PMV/PPD
-    - [ ] conforto externo, UTCI 🟢 sem o vento: temperatura radiante média a
+    - [x] conforto externo, UTCI 🟢 sem o vento: temperatura radiante média a
       partir da radiação do `sol_luz` (motor A) + ar, umidade e vento do EPW.
       Era parte da Etapa 1 ("conforto externo") e não foi feito lá
-    - [ ] ganho solar pelas aberturas, W/m² e WWR por orientação 🟢 (radiação
+    - [x] ganho solar pelas aberturas, W/m² e WWR por orientação 🟢 (radiação
       nos vidros × τ/FS; WWR direto da geometria)
-    - [ ] compacidade, superfície ÷ volume 🟢 (só geometria)
+    - [x] compacidade, superfície ÷ volume 🟢 (só geometria)
     - [ ] balanço energético zero, geração − consumo kWh/ano 🟡 (depende de
       `sol_luz.fv` e de `termico.eui`: exemplo de `depende_de`)
 - [ ] 5. Vento (XLB) + IA substituta
@@ -383,3 +387,42 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
   (provavelmente servidor/código antigo ainda carregado); com o diagnóstico ("Trabalhador
   vê: …" e contador na mensagem) entrou normalmente. O log do componente agora se
   atualiza quando o laço escreve (ScheduleSolution → ExpireSolution).
+- Etapa 4a (2026-11-27), módulo `termico` (`modulos/termico/`), sem pacote novo. Métricas:
+  compacidade (1/m), area_envoltoria, volume, wwr e wwr_N/L/S/O (%), ganho_solar (kWh/ano),
+  ganho_solar_piso (kWh/m²·ano), ganho_solar_N/L/S/O (kWh/m²·ano de vidro, 0 sem vidro),
+  utci_conforto / utci_calor / utci_frio (% das 8760 h com UTCI 9–26, > 26, < 9 °C).
+- Envoltória (`envoltoria.py`) = fachada + vidro + cobertura, normais para fora; pisos fora
+  (os internos estragariam a conta). Volume pela divergência com (0, 0, z − z_base): faces
+  verticais e a base dão zero, então a malha pode vir aberta embaixo; base que falta =
+  Σ n_z·A (zero se a base já estiver na malha). Parede = normal entre 60° e 130° do zênite
+  (como o Honeybee); orientação N 315–45°, L 45–135°, S 135–225°, O 225–315°. Validação
+  analítica (caixa, caixa fechada elevada, rotação, WWR do protótipo).
+- Ganho solar = radiação do motor A nos sensores do vidro (0,1 m para fora, grade/MF do
+  nível do sol_luz, mesma matriz e cache) × FS constante (sem variação com o ângulo).
+  `Variante.fator_solar` novo (padrão 0,42 = Generic Double Pane do Honeybee, τ 0,64);
+  no protocolo `materiais → vidro → fs`. Validação: claraboia sem obstrução contra
+  Σ (DHI + DNI·sen alt) do EPW, −0,8% (rápido), −0,2% (validação); vertical já validado
+  na 1b (LB Incident Radiation).
+- UTCI (`conforto_externo.py`): o método do LB Outdoor Solar MRT + LB UTCI Comfort.
+  Pessoas = sensores nas faces de `entorno` voltadas para cima (grade do nível), ponto a
+  0,918 m (o meio de uma pessoa de 1,8 m, como o LB Human to Sky Relation com 1 ponto).
+  Exposição ao céu = patches de Tregenza vistos, ponderados pelo ângulo sólido (Σ = 2π,
+  igual ao `dome_patch_weights` do LB); corpo ao sol = 0/1 por hora (sol no meio da hora).
+  MRT por SolarCal: T_superfícies = T_ar, céu por IR horizontal (σ 5,6697e-8, ε 0,95),
+  em pé, sol a 135°, α 0,7, ρ_piso 0,25, sem onda curta com sol < 2°. UTCI: polinômio de
+  Bröde (210 termos) com os coeficientes extraídos exatamente da função do
+  ladybug_comfort (`dados_conforto.json`, gerado por `scripts/gerar_ref_termico.py` com o
+  Python do Ladybug Tools: o script passa "variáveis simbólicas" para a função); a cada hora
+  vira um polinômio de grau 6 em ΔT = MRT − T_ar (Horner em float32 na GPU). Vento do EPW
+  (10 m) limitado a 0,5–17 m/s. A tabela do fator de projeção do SolarCal (em pé, 135°)
+  também vem do LB. Vento local (XLB) e temperaturas de superfície ficam para depois.
+- Validação UTCI contra o ladybug_comfort (`testes/referencias/curitiba/termico_ladybug.json`):
+  300 pontos sorteados, |dif| < 1e-9 °C; MRT e UTCI hora a hora com as entradas e altitudes
+  do LB em três situações (céu 1/corpo 1; 0,5/0,5; 0,2/0): MRT < 1e-4 °C, UTCI < 1e-3 °C.
+  Pegadinha: o leitor de EPW do Ladybug não alinha todos os campos do mesmo jeito (a
+  temperatura vem deslocada uma hora, a radiação não), e o sol do LB está no início da
+  hora; por isso o gabarito grava as séries que o LB usou. No módulo (sol no meio da hora),
+  campo aberto em Curitiba: conforto 78,39% × LB 78,86%, calor 13,70 × 13,44, frio
+  7,91 × 7,71. Céu e sol vistos conferidos contra a conta analítica de um muro de 1 km.
+- Benchmark 4a (64 variantes com praça de 40 × 40 m, RTX 5070): geometria ~5000/s,
+  ganho solar ~1300/s, UTCI 326/s (rápido, grade 2 m) e 105/s (padrão, grade 1 m).

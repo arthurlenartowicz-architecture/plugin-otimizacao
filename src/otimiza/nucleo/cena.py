@@ -33,6 +33,7 @@ class Variante:
     rotulos: torch.Tensor        # (F,) códigos de ROTULOS
     refletancia: torch.Tensor    # (F,) visível
     transmitancia: torch.Tensor  # (F,) τ normal (> 0 = vidro)
+    fator_solar: float = 0.42    # FS (SHGC) dos vidros; padrão = Generic Double Pane do Honeybee
 
     def __post_init__(self):
         f = self.faces.shape[0]

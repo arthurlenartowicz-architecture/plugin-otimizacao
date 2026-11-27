@@ -35,6 +35,7 @@ def carregar_modulos():
     """Registra os módulos (import com efeito de registro)."""
     import otimiza.modulos.estrutura  # noqa: F401
     import otimiza.modulos.sol_luz  # noqa: F401
+    import otimiza.modulos.termico  # noqa: F401
 
 
 def metricas() -> dict:

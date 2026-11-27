@@ -148,8 +148,11 @@ def variante_de(malhas: dict, escala: float = 1.0, materiais: dict | None = None
     rotulos = torch.tensor([CODIGO[r] for r in rot])
     refl = torch.tensor([rho[r] for r in rot], dtype=torch.float32)
     trans = torch.tensor([tau if r == "vidro" else 0.0 for r in rot], dtype=torch.float32)
+    from otimiza.nucleo.prototipos import FS_VIDRO
+
+    fs_vidro = ((materiais or {}).get("vidro") or {}).get("fs", FS_VIDRO)
     return Variante(torch.from_numpy(np.concatenate(vs)), torch.from_numpy(np.concatenate(fs)),
-                    rotulos, refl, trans)
+                    rotulos, refl, trans, float(fs_vidro))
 
 
 def malhas_de_variante(v: Variante, b64: bool = True) -> dict:
