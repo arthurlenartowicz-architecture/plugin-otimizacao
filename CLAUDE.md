@@ -57,6 +57,21 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon (plugin)
 - [ ] 2. Estrutura: FEM de barras em lote (validar contra o Karamba)
 - [ ] 3. Otimizador + Pareto no Rhino → MVP do TCC
 - [ ] 4. Plugin C# completo + térmico, carbono/custo, programa
+  - Objetivos do módulo `termico` (🟢 = direto na GPU; 🟡 = modelo simplificado):
+    - [ ] carga de resfriamento e aquecimento, kWh/ano 🟡 (modelo RC em lote
+      por zona; ganhos solares vêm do `sol_luz`)
+    - [ ] consumo energético total, EUI kWh/m²·ano 🟡 (cargas ÷ COP/eficiência
+      + iluminação usando a autonomia de luz natural do `sol_luz` + equipamentos)
+    - [ ] conforto interno 🟡: graus-hora / horas de desconforto, conforto
+      adaptativo (ASHRAE 55 / EN 16798), PMV/PPD
+    - [ ] conforto externo, UTCI 🟢 sem o vento: temperatura radiante média a
+      partir da radiação do `sol_luz` (motor A) + ar, umidade e vento do EPW.
+      Era parte da Etapa 1 ("conforto externo") e não foi feito lá
+    - [ ] ganho solar pelas aberturas, W/m² e WWR por orientação 🟢 (radiação
+      nos vidros × τ/FS; WWR direto da geometria)
+    - [ ] compacidade, superfície ÷ volume 🟢 (só geometria)
+    - [ ] balanço energético zero, geração − consumo kWh/ano 🟡 (depende de
+      `sol_luz.fv` e de `termico.eui`: exemplo de `depende_de`)
 - [ ] 5. Vento (XLB) + IA substituta
 
 ## Regras de trabalho
