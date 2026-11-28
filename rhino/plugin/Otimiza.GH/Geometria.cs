@@ -37,11 +37,13 @@ namespace Otimiza.GH
         public static JsonObject? Malha(IEnumerable<object?> objetos, MeshingParameters mp)
         {
             var partes = new List<Mesh>();
-            foreach (var o in objetos)
+            foreach (var o in objetos) Adicionar(o);
+            void Adicionar(object? o)
             {
                 switch (o)
                 {
                     case null: break;
+                    case Ambiente a: Adicionar(a.Geometria); break;
                     case Mesh m: partes.Add(m); break;
                     case Brep b: Malhar(b, mp, partes); break;
                     case Extrusion e: Malhar(e.ToBrep(), mp, partes); break;
@@ -65,6 +67,22 @@ namespace Otimiza.GH
             foreach (var r in rotulos)
             {
                 if (!entradas.TryGetValue(r, out var objs)) continue;
+                if (r == "piso" && objs.Any(o => o is Ambiente))
+                {
+                    // pisos com nome (componente Ambiente): um item por ambiente, o resto junto
+                    var itens = new JsonArray();
+                    foreach (var a in objs.OfType<Ambiente>())
+                    {
+                        var ma = Malha(new object?[] { a.Geometria }, mp);
+                        if (ma == null) continue;
+                        ma["ambiente"] = a.Nome;
+                        itens.Add(ma);
+                    }
+                    var resto = Malha(objs.Where(o => !(o is Ambiente)), mp);
+                    if (resto != null) itens.Add(resto);
+                    if (itens.Count > 0) saida[r] = itens;
+                    continue;
+                }
                 var m = Malha(objs, mp);
                 if (m != null) saida[r] = m;
             }

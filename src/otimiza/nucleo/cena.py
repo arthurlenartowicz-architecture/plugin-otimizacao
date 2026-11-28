@@ -9,6 +9,8 @@ material. Rótulos usados pelos módulos:
   interno   outras superfícies internas (só refletem)
   contexto  entorno existente (faz sombra, não é avaliado)
   entorno   entorno sensível (sensores de perda de sol: vizinhos, praças)
+Pisos podem ter um ambiente (uso: sala, quarto…) para o módulo programa
+(`Variante.ambientes` / `usos`).
 
 O módulo estrutura usa `estruturas` (modelo de barras de cada variante), à
 parte da malha; uma cena só de estrutura pode ter `variantes=[]` e clima None.
@@ -34,12 +36,21 @@ class Variante:
     refletancia: torch.Tensor    # (F,) visível
     transmitancia: torch.Tensor  # (F,) τ normal (> 0 = vidro)
     fator_solar: float = 0.42    # FS (SHGC) dos vidros; padrão = Generic Double Pane do Honeybee
+    # ambientes (módulo programa): índice do ambiente de cada face (−1 = nenhum) e o uso de cada
+    # ambiente (ex.: ("sala", "quarto", "quarto")); só os pisos costumam ter ambiente
+    ambientes: torch.Tensor | None = None
+    usos: tuple[str, ...] = ()
 
     def __post_init__(self):
         f = self.faces.shape[0]
         for nome in ("rotulos", "refletancia", "transmitancia"):
             if getattr(self, nome).shape[0] != f:
                 raise ValueError(f"{nome} precisa de um valor por face ({f})")
+        if self.ambientes is not None:
+            if self.ambientes.shape[0] != f:
+                raise ValueError(f"ambientes precisa de um valor por face ({f})")
+            if self.ambientes.numel() and int(self.ambientes.max()) >= len(self.usos):
+                raise ValueError("ambiente sem uso: usos precisa de um nome por ambiente")
 
 
 @dataclass

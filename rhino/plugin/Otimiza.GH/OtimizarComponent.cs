@@ -64,6 +64,9 @@ namespace Otimiza.GH
             Botao("iniciar");
             Botao("parar");
             Botao("avaliar");
+            // no fim, para os .gh salvos antes continuarem abrindo com as entradas no lugar
+            Textos("programa", "saída dos componentes Lote e/ou Programa (módulo programa: CA, taxa de ocupação, " +
+                               "recuos, áreas por uso, adjacências); ou 'necessidades = arquivo.json' em opcoes");
         }
 
         protected override void RegisterOutputParams(GH_OutputParamManager p)
@@ -135,7 +138,14 @@ namespace Otimiza.GH
 
         static JsonArray Arr(IEnumerable<string> s) => new JsonArray(s.Select(x => (JsonNode)x).ToArray());
 
-        static JsonObject PedidoBase(Opcoes op, IEnumerable<string> problema)
+        /// <summary>Programa (lote + necessidades): painel opcoes `necessidades =` e entrada programa.</summary>
+        static JsonObject? ProgramaDe(IGH_DataAccess DA, Opcoes op)
+        {
+            var p = ProgramaJson.Juntar(Textos(DA, "programa"), op.Necessidades());
+            return p.Count > 0 ? p : null;
+        }
+
+        static JsonObject PedidoBase(Opcoes op, IEnumerable<string> problema, JsonObject? programa)
         {
             var d = new JsonObject
             {
@@ -147,6 +157,7 @@ namespace Otimiza.GH
             if (op.Tem("epw")) d["epw"] = op.Texto("epw", "");
             var cc = op.CarbonoCusto();
             if (cc != null) d["carbono_custo"] = cc;
+            if (programa != null) d["programa"] = programa;
             return d;
         }
 
@@ -221,7 +232,7 @@ namespace Otimiza.GH
                 var genes = Genoma.De(this);
                 var problema = Problema(DA);
                 string raiz = Raiz(op), caso = op.Texto("caso", "gh");
-                var pedido = PedidoBase(op, problema);
+                var pedido = PedidoBase(op, problema, ProgramaDe(DA, op));
                 pedido["parametros"] = new JsonArray(genes.Select(g => g.Protocolo.DeepClone()).ToArray());
                 pedido["algoritmo"] = op.Texto("algoritmo", "auto");
                 pedido["populacao"] = op.Int("populacao", 48);
@@ -277,7 +288,7 @@ namespace Otimiza.GH
             var sw = Stopwatch.StartNew();
             var geo = Geometria.Atual(entradas, op);
             double tGh = sw.Elapsed.TotalSeconds;
-            var pedido = PedidoBase(op, Problema(DA));
+            var pedido = PedidoBase(op, Problema(DA), ProgramaDe(DA, op));
             pedido["geometrias"] = new JsonArray(geo);
             var fixas = Geometria.Malhas(entradas, Geometria.Fixos, Geometria.Parametros(op.Texto("malha", "minima")));
             if (fixas.Count > 0) pedido["fixas"] = new JsonObject { ["malhas"] = fixas };

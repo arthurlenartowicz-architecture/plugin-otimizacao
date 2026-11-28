@@ -83,6 +83,26 @@ def test_cliente_cs_contra_servidor(programa, servidor, tmp_path):
         for m, x in ref.items():
             assert rel["avaliar"][f"termico.{m}"][k] == pytest.approx(x, rel=1e-5, abs=1e-6), m
 
+    # programa (4e): JSON dos componentes Lote/Programa e /avaliar com pisos com ambiente
+    pg = rel["programa"]
+    assert pg["lote"] == {"lote": [[-5, -10, 0], [15, -10, 0], [15, 20, 0], [-5, 20, 0]]}
+    assert pg["prog"]["areas"] == {"sala": 20, "quarto": 12}
+    assert pg["prog"]["adjacencias"] == [["sala", "quarto", 2], ["sala", "cozinha", 1]]
+    assert pg["juntos"]["arquivo"] == "C:/x/p.json" and pg["juntos"]["lote"] == pg["lote"]["lote"]
+    assert pg["juntos"]["adjacencia"] == {"parede_max": 0.3, "comprimento_min": 1}
+    assert pg["resumo"].startswith("lote 600 m² (4 pontos) · 2 usos, 32 m² de meta · 2 adjacências")
+    assert pg["erros"] == 8
+    assert pg["necessidades"] == "C:/x/p.json" and pg["sem_necessidades"]
+    from otimiza.modulos.programa.necessidades import programa_de
+    programa_de(pg["juntos"] | {"arquivo": None})          # o servidor aceita o que o C# monta
+    val = pg["valores"]
+    assert val["programa.ca"][0] == pytest.approx((20 + 4 * 2.85) / 600, rel=1e-5)
+    assert val["programa.taxa_ocupacao"][0] == pytest.approx(8.0, rel=1e-6)
+    assert val["programa.recuo_min"][0] == pytest.approx(5.0, rel=1e-5)
+    assert val["programa.altura"][0] == pytest.approx(3.0, rel=1e-5)
+    assert val["programa.atendimento_programa"][0] == pytest.approx(100 * (20 + 4 * 2.85) / 32, rel=1e-5)
+    assert val["programa.adjacencia"][0] == pytest.approx(100 * 2 / 3, rel=1e-6)
+
     # trabalhador com genoma diferente recusou entrar
     assert rel["w3"]["estado"] == "erro"
     assert any("não tem no genoma" in x for x in rel["w3"]["log"])

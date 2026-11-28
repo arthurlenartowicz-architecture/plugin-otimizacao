@@ -146,7 +146,11 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
     - [x] 4d · módulo `carbono_custo`: carbono incorporado (A1–A3) e operacional, total em N
       anos, custo de construção, operação e ciclo de vida; tabela `fatores.json` editável
       (painel `fatores =` ou campo `carbono_custo` do protocolo). Entra na janela pelo `/metricas`.
-    - [ ] 4e (ver acima), entra na janela automaticamente pelo `/metricas`.
+    - [x] 4e · módulo `programa`: índices urbanísticos (área construída, CA, taxa de ocupação,
+      altura, recuo mínimo) com o lote, e programa de necessidades (atendimento e desvio das
+      áreas-meta, eficiência, adjacências, distância ponderada) com pisos nomeados. Entrada =
+      `programa.json` (ou campo `programa`); componentes Lote, Programa e Ambiente no Otimiza.gha
+      e entrada `programa` no Otimizar (adiantados da 4f3). Aba visual do programa fica para a 4f4.
     - [ ] 4f3 · Componentes do GH: Clima (EPW, local), Entorno e Edifício (geometria + rótulo
       → objeto Cena), Genes (sliders/Value Lists ligados = genoma), um de análise por módulo
       (`/avaliar` na hora). Otimizar aceita Cena + Genes e mantém as entradas atuais.
@@ -727,3 +731,48 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
   pelo motor com o termico de verdade, servidor (`/metricas`, campo `carbono_custo`, sem EPW).
   Tolerância 1e-9 relativa (aritmética). Comparação com EC3/One Click LCA não feita: serviços online
   com conta, fora do ambiente.
+- 4e (2026-11-28), módulo `programa` (`modulos/programa/`, sem pacote novo, sem raios nem clima:
+  `programa.*` não carrega EPW). Métricas: area_construida (m², Σ pisos = a área de piso do
+  termico), ca (área construída ÷ lote), taxa_ocupacao (%), altura (m, z máx. do projeto − cota do
+  lote; sem z no lote, a base do projeto), recuo_min (m, menor distância horizontal à divisa;
+  negativa = −a maior distância para fora), atendimento_programa (Σ mín(área, meta) ÷ Σ metas),
+  desvio_programa (Σ |área − meta| ÷ Σ metas), eficiencia_planta (ambientes do programa ÷ área
+  construída; pisos sem nome = circulação), adjacencia (% do peso dos pares atendidos),
+  distancia_ponderada (média ponderada da menor distância entre centros dos ambientes dos dois
+  usos). Projeto = fachada/vidro/cobertura/piso/interno.
+- Taxa de ocupação por grade (centro da célula dentro de algum triângulo projetado, na GPU;
+  células 0,5 / 0,25 / 0,1 m em rápido / padrão / validação): paredes verticais não projetam, a
+  projeção vem de pisos e coberturas (balanço conta). Caixa girada (0–87°): erro médio 0,49 /
+  0,16 / 0,03%, máx. 2,1 / 1,0 / 0,08%. ~240 variantes/s com todas as métricas urbanísticas (o
+  laço por variante em Python domina). Recuo exato (vértices × divisas e cantos do lote × arestas).
+- Adjacência = bordas dos pisos (arestas de um triângulo só, vértices soldados a 1 mm: emendas e
+  diagonais não contam) paralelas (±5°), a ≤ `parede_max` (0,4 m) e na mesma cota (±0,5 m),
+  sobrepostas por ≥ `comprimento_min` (0,8 m, cabe uma porta). Uso que falta: par não atendido e
+  fora da distância (sem nenhum par medível, NaN = inviável).
+- Entrada: `programa.json` (`necessidades.py`: lote, areas, adjacencias em lista ou texto
+  "a-b:peso", adjacencia; `arquivo` ← resto do dicionário, chaves de cima trocam inteiras e
+  `adjacencia` combina; chave desconhecida = erro). Chega ao módulo por
+  `CenaLote.opcoes["programa"]`; protocolo: campo opcional `programa` no `/iniciar` e `/avaliar`
+  (v1, só acrescentado), com erro já no pedido se faltar lote/áreas/adjacências para as métricas
+  pedidas. Ambientes: item de malha de `piso` com `"ambiente": nome` → `Variante.ambientes`
+  (índice por face, −1 = nenhum) + `usos` (campos novos, opcionais); `malhas_de_variante` devolve
+  um item por ambiente (ida e volta igual).
+- GH (decisão do usuário, 2026-11-28: JSON agora + componentes; aba visual na 4f4): Lote (curva
+  fechada e plana do Rhino ou do GH → JSON em metros), Programa (usos + áreas + adjacências →
+  JSON + resumo) e Ambiente (piso + nome → `AmbienteGoo`, com o nome desenhado no Rhino; o
+  Otimizar recebe o objeto `Ambiente` pelo `ScriptVariable`, C# e GhPython). Otimizar C#: entrada
+  `programa` acrescentada no FIM (para .gh antigos abrirem com as entradas no lugar; conferir no
+  Rhino) e `necessidades = arquivo.json` no painel opcoes. Lógica sem Rhino em
+  `Otimiza.Cliente/ProgramaJson.cs`. O `otimizar.gh` (GhPython) não foi remontado.
+- Validação 4e (`testes/test_programa.py`, conta à mão): caixa 6×8×3 num lote 20×30 (CA 0,08, TO
+  8% exata com a grade alinhada, altura 3 / 4 com o lote em z −1, recuo 5); girada 30° (TO pela
+  grade: tolerância 3 / 1 / 0,4% por nível; recuo pelos cantos, 1e-9); balanço de 2 m (TO 64/600,
+  recuo 3) e caixa fora do lote (−2); planta com sala (dois retângulos), cozinha e quarto a 15 cm e
+  circulação sem nome: áreas, atendimento, desvio, eficiência, adjacência 60% (limites trocados: 0
+  e 40%), distância ponderada; lote = individual; protocolo (ida e volta; 'ambiente' fora do piso
+  = erro) e servidor sem EPW. C# (`test_cliente_cs.py`): JSON do Lote/Programa/Juntar, 8 erros
+  esperados, `necessidades`, `/avaliar` com pisos nomeados em mm = conta à mão. Não há ferramenta
+  de referência (como o Ladybug); conta analítica, pela regra do projeto.
+- `test_rastrigin_2d_global[cmaes]` falha ao rodar `test_mono_objetivo.py` sozinho (também no
+  commit 37e417a, antes da 4e) e passa na suíte inteira: é a não reprodutibilidade do CMA-ES do
+  pymoo já registrada acima.

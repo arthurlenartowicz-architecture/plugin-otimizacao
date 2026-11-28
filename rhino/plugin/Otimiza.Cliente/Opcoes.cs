@@ -75,6 +75,10 @@ namespace Otimiza.Cliente
             Tem("fatores") && Texto("fatores", "") != ""
                 ? new JsonObject { ["arquivo"] = Texto("fatores", "") } : null;
 
+        /// <summary>necessidades = caminho.json (programa de necessidades e lote, módulo programa) ou null.</summary>
+        public string? Necessidades() =>
+            Tem("necessidades") && Texto("necessidades", "") != "" ? Texto("necessidades", "") : null;
+
         /// <summary>"0,0,-10" ou "0;0;-10" → [0, 0, -10].</summary>
         public double[] Vetor(string k, string padrao) =>
             Texto(k, padrao).Replace(";", ",").Split(',')

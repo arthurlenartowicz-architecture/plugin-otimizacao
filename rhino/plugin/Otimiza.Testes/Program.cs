@@ -84,6 +84,50 @@ static class Programa
         });
         rel["avaliar"] = av["valores"]!.DeepClone();
 
+        // programa (4e): o que os componentes Lote/Programa/Ambiente montam, e o /avaliar com isso
+        var lote = ProgramaJson.Lote(new List<double[]> { P(-5, -10, 0), P(15, -10, 0), P(15, 20, 0), P(-5, 20, 0), P(-5, -10, 0) });
+        var prog = ProgramaJson.Montar(ProgramaJson.Juntar(new[] { lote.ToJsonString() }), new[] { "sala", "quarto" },
+                                       new[] { 20.0, 12.0 }, new[] { "sala-quarto:2", "sala, cozinha" });
+        var juntos = ProgramaJson.Juntar(new[] { prog.ToJsonString(), "{\"adjacencia\": {\"parede_max\": 0.3}}",
+                                                 "{\"adjacencia\": {\"comprimento_min\": 1}}" }, "C:/x/p.json");
+        int errosProg = 0;
+        foreach (var ruim in new Action[]
+                 {
+                     () => ProgramaJson.Lote(new List<double[]> { P(0, 0, 0), P(1, 1, 0), P(2, 2, 0) }),
+                     () => ProgramaJson.Montar(null, new[] { "sala" }, new double[0], new string[0]),
+                     () => ProgramaJson.Montar(null, new[] { "sala", "sala" }, new[] { 1.0, 2.0 }, new string[0]),
+                     () => ProgramaJson.Montar(null, new[] { "sala" }, new[] { -1.0 }, new string[0]),
+                     () => ProgramaJson.Adjacencia("sala"),
+                     () => ProgramaJson.Adjacencia("sala-sala"),
+                     () => ProgramaJson.Adjacencia("sala-quarto:x"),
+                     () => ProgramaJson.Juntar(new[] { "sala = 20" }),
+                 })
+        {
+            try { ruim(); } catch (ArgumentException) { errosProg++; }
+        }
+        var vp = new List<float>(); var fp = new List<int>();
+        Quad(vp, fp, P(0, 0, 0), P(4, 0, 0), P(4, 5, 0), P(0, 5, 0));
+        var vq = new List<float>(); var fq = new List<int>();
+        Quad(vq, fq, P(0, 5.15, 0), P(4, 5.15, 0), P(4, 8, 0), P(0, 8, 0));
+        var casa = Caixa(6, 8, 3, false);
+        var sala = Codificacao.Malha(vp.ToArray(), fp.ToArray()); sala["ambiente"] = "sala";
+        var quarto = Codificacao.Malha(vq.ToArray(), fq.ToArray()); quarto["ambiente"] = "quarto";
+        casa["piso"] = new JsonArray(sala, quarto);
+        var avp = cli.Avaliar(new JsonObject
+        {
+            ["versao"] = 1, ["nivel"] = "padrao", ["escala"] = 1.0 / Mm, ["programa"] = prog.DeepClone(),
+            ["metricas"] = Lista("programa.ca", "programa.taxa_ocupacao", "programa.recuo_min", "programa.altura",
+                                 "programa.atendimento_programa", "programa.adjacencia"),
+            ["geometrias"] = new JsonArray(new JsonObject { ["malhas"] = casa }),
+        });
+        rel["programa"] = new JsonObject
+        {
+            ["lote"] = lote, ["prog"] = prog, ["juntos"] = juntos, ["resumo"] = ProgramaJson.Resumo(juntos),
+            ["erros"] = errosProg, ["necessidades"] = Opcoes.De(new[] { "necessidades = C:/x/p.json" }).Necessidades(),
+            ["sem_necessidades"] = Opcoes.De(new[] { "nivel = rapido" }).Necessidades() == null,
+            ["valores"] = avp["valores"]!.DeepClone(),
+        };
+
         // otimização: 1 principal + 2 trabalhadores, cada um com o seu cliente e a sua thread
         var parametros = new JsonArray(
             new JsonObject { ["nome"] = "largura", ["tipo"] = "continuo", ["minimo"] = 4.0, ["maximo"] = 12.0, ["casas"] = 2 },

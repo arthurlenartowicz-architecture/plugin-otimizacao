@@ -119,10 +119,12 @@ def materiais_de(d: dict | None) -> tuple[dict, float]:
     return rho, tau
 
 
-def _malhas(d: dict) -> list[tuple[np.ndarray, np.ndarray]]:
+def _malhas(d: dict) -> list[tuple[np.ndarray, np.ndarray, str | None]]:
+    """(vértices, faces, ambiente) de cada malha; `ambiente` = uso do piso (módulo programa)."""
     itens = d if isinstance(d, list) else [d]
     return [(array(m["vertices"], m.get("tipo_vertices", "f4"), 3),
-             array(m["faces"], "i4", 3)) for m in itens if m]
+             array(m["faces"], "i4", 3), (str(m["ambiente"]).strip() or None) if m.get("ambiente") else None)
+            for m in itens if m]
 
 
 def variante_de(malhas: dict, escala: float = 1.0, materiais: dict | None = None,
@@ -130,18 +132,23 @@ def variante_de(malhas: dict, escala: float = 1.0, materiais: dict | None = None
     """Junta as malhas por rótulo (e as `fixas`, mesmo formato, mandadas uma vez só)
     numa Variante em metros. `escala` = unidade do modelo → metro."""
     rho, tau = materiais_de(materiais)
-    vs, fs, rot = [], [], []
+    vs, fs, rot, amb, usos = [], [], [], [], []
     base = 0
     for grupo in (malhas or {}, fixas or {}):
         for r, d in grupo.items():
             if r not in CODIGO:
                 raise ErroProtocolo(f"rótulo desconhecido {r!r} (use {ROTULOS})")
-            for v, f in _malhas(d):
+            for v, f, ambiente in _malhas(d):
                 if f.size and (f.min() < 0 or f.max() >= len(v)):
                     raise ErroProtocolo(f"{r}: face aponta para vértice inexistente")
+                if ambiente and r != "piso":
+                    raise ErroProtocolo(f"'ambiente' só vale em pisos (veio em {r!r})")
                 vs.append(v.astype(np.float64) * escala)
                 fs.append(f.astype(np.int64) + base)
                 rot += [r] * len(f)
+                amb += [len(usos) if ambiente else -1] * len(f)
+                if ambiente:
+                    usos.append(ambiente)
                 base += len(v)
     if not fs or not sum(len(f) for f in fs):
         raise ErroProtocolo("variante sem faces")
@@ -152,7 +159,8 @@ def variante_de(malhas: dict, escala: float = 1.0, materiais: dict | None = None
 
     fs_vidro = ((materiais or {}).get("vidro") or {}).get("fs", FS_VIDRO)
     return Variante(torch.from_numpy(np.concatenate(vs)), torch.from_numpy(np.concatenate(fs)),
-                    rotulos, refl, trans, float(fs_vidro))
+                    rotulos, refl, trans, float(fs_vidro),
+                    torch.tensor(amb, dtype=torch.int64) if usos else None, tuple(usos))
 
 
 def malhas_de_variante(v: Variante, b64: bool = True) -> dict:
@@ -163,11 +171,19 @@ def malhas_de_variante(v: Variante, b64: bool = True) -> dict:
         m = (v.rotulos == CODIGO[r]).cpu().numpy()
         if not m.any():
             continue
-        f = v.faces.cpu().numpy()[m]
-        usados, novo = np.unique(f, return_inverse=True)
-        vv, ff = vert[usados], novo.reshape(-1, 3)
-        saida[r] = ({"vertices": para_b64(vv, "f8"), "tipo_vertices": "f8", "faces": para_b64(ff, "i4")}
+        amb = (v.ambientes.cpu().numpy() if v.ambientes is not None and r == "piso"
+               else np.full(len(m), -1))
+        itens = []
+        for k in np.unique(amb[m]):            # um item por ambiente (−1 = sem ambiente)
+            f = v.faces.cpu().numpy()[m & (amb == k)]
+            usados, novo = np.unique(f, return_inverse=True)
+            vv, ff = vert[usados], novo.reshape(-1, 3)
+            item = ({"vertices": para_b64(vv, "f8"), "tipo_vertices": "f8", "faces": para_b64(ff, "i4")}
                     if b64 else {"vertices": vv.tolist(), "faces": ff.tolist()})
+            if k >= 0:
+                item["ambiente"] = v.usos[k]
+            itens.append(item)
+        saida[r] = itens[0] if len(itens) == 1 and "ambiente" not in itens[0] else itens
     return saida
 
 

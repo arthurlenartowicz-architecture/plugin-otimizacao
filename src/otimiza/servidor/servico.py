@@ -37,6 +37,7 @@ def carregar_modulos():
     import otimiza.modulos.sol_luz  # noqa: F401
     import otimiza.modulos.termico  # noqa: F401
     import otimiza.modulos.carbono_custo  # noqa: F401
+    import otimiza.modulos.programa  # noqa: F401
 
 
 def metricas() -> dict:
@@ -177,8 +178,25 @@ class Config:
             except (ValueError, TypeError, KeyError) as e:
                 raise pr.ErroProtocolo(str(e)) from None
             self.opcoes["carbono_custo"] = d["carbono_custo"]
+        # programa (4e): lote, áreas-meta e adjacências; mesmo formato do programa.json
+        pedidas = {c.split(".", 1)[1] for c in chaves if c.startswith("programa.")}
+        if d.get("programa") or pedidas:
+            from otimiza.modulos.programa.modulo import COM_ADJ, COM_AREAS, COM_LOTE
+            from otimiza.modulos.programa.necessidades import programa_de
+            try:
+                prog = programa_de(d.get("programa"))
+            except (ValueError, TypeError, KeyError) as e:
+                raise pr.ErroProtocolo(str(e)) from None
+            for falta, quais, onde in ((prog["lote"] is None, COM_LOTE, "o lote (componente Lote)"),
+                                       (not prog["areas"], COM_AREAS, "as áreas-meta ('areas')"),
+                                       (not prog["adjacencias"], COM_ADJ, "as 'adjacencias'")):
+                if falta and pedidas & quais:
+                    raise pr.ErroProtocolo(f"programa.{sorted(pedidas & quais)[0]} precisa de {onde} "
+                                           "no campo 'programa'")
+            if d.get("programa"):
+                self.opcoes["programa"] = d["programa"]
         from otimiza.modulos.carbono_custo.modulo import SEM_CLIMA
-        precisa_clima = any(not (c.startswith("estrutura.") or
+        precisa_clima = any(not (c.startswith("estrutura.") or c.startswith("programa.") or
                                  (c.startswith("carbono_custo.") and c.split(".")[1] in SEM_CLIMA))
                             for c in chaves)
         self.clima, self.cache = servico.clima(d.get("epw")) if precisa_clima else (None, None)

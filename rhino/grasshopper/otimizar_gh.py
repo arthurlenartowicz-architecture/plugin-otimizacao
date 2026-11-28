@@ -263,10 +263,33 @@ def malha_de(objetos, mp):
     return {"vertices": _b64(m.Vertices.ToFloatArray(), 4), "faces": _b64(m.Faces.ToIntArray(True), 4)}
 
 
+def _ambiente(o):
+    """Objeto do componente Ambiente (Otimiza.gha): (nome, geometria) ou None."""
+    g = _geom(o)
+    if hasattr(g, "Nome") and hasattr(g, "Geometria"):
+        return g.Nome, g.Geometria
+    return None
+
+
 def malhas_de(entradas, rotulos, mp):
     saida = {}
     for r in rotulos:
-        m = malha_de(entradas.get(r), mp)
+        objs = _lista(entradas.get(r))
+        ambs = [a for a in (_ambiente(o) for o in objs) if a] if r == "piso" else []
+        if ambs:   # pisos com nome de ambiente (módulo programa): um item por ambiente
+            itens = []
+            for nome, g in ambs:
+                m = malha_de([g], mp)
+                if m is not None:
+                    m["ambiente"] = nome
+                    itens.append(m)
+            m = malha_de([o for o in objs if not _ambiente(o)], mp)
+            if m is not None:
+                itens.append(m)
+            if itens:
+                saida[r] = itens
+            continue
+        m = malha_de(objs, mp)
         if m is not None:
             saida[r] = m
     return saida
@@ -349,6 +372,27 @@ def pedido_base(op, problema):
         d["epw"] = op["epw"]
     if op.get("fatores"):   # tabela de carbono/custo editada pelo usuario (copia do fatores.json)
         d["carbono_custo"] = {"arquivo": op["fatores"]}
+    prog = programa_de(op, _g("programa"))
+    if prog:
+        d["programa"] = prog
+    return d
+
+
+def programa_de(op, textos):
+    """Programa (módulo programa): `necessidades = arquivo.json` no painel opcoes, depois os
+    textos JSON dos componentes Lote/Programa ligados numa entrada `programa` (se existir)."""
+    d = {}
+    if op.get("necessidades"):
+        d["arquivo"] = op["necessidades"]
+    for t in _lista(textos):
+        t = (u"%s" % t).strip()
+        if not t:
+            continue
+        x = json.loads(t)
+        adj = dict(d.get("adjacencia") or {}, **(x.get("adjacencia") or {}))
+        d.update(x)
+        if adj:
+            d["adjacencia"] = adj
     return d
 
 

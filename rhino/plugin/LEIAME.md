@@ -1,6 +1,7 @@
 # Plugin C# do Grasshopper (Etapa 4c)
 
-`Otimiza.gha` traz o componente **Otimizar** (aba *Otimiza → Otimização*): o mesmo do
+`Otimiza.gha` traz o componente **Otimizar** (aba *Otimiza → Otimização*) e, desde a 4e, os
+componentes **Lote**, **Programa** e **Ambiente** (aba *Otimiza → Programa*, ver abaixo). O Otimizar é o mesmo do
 `rhino/grasshopper/otimizar_gh.py`, com as mesmas entradas, saídas e opções (ver
 `rhino/grasshopper/LEIAME.md`, Etapa 3b), falando o mesmo protocolo v1 com o servidor
 Python. O `otimizar_gh.py` continua funcionando.
@@ -66,3 +67,25 @@ O componente acha a pasta do projeto subindo a partir do `.gha` (ou do `.gh`) at
   sliders recebem os valores e a geometria aparece no Rhino (só com a otimização parada).
 
 Conferência: `rhino/grasshopper/conferir_janela.py` (roteiro no próprio arquivo).
+
+## Programa (4e): Lote, Programa e Ambiente
+
+Aba *Otimiza → Programa*. Todos escrevem o formato do `programa.json` (módulo `programa`);
+nenhum altera a geometria do usuário.
+
+- **Lote**: curva fechada e plana (do Rhino: botão direito → *Set one Curve*; ou do GH) →
+  `lote` (JSON, pontos em metros) e `area`. Arcos viram polígono com flecha ≤ 1 cm.
+- **Programa**: `usos` (textos) + `areas` (m², na mesma ordem; podem vir de sliders) +
+  `adjacencias` (`sala-cozinha`, `sala-cozinha:2` com peso, ou `sala, cozinha, 2` se o nome
+  tiver hífen) + `lote` (opcional) e os limites `parede_max` / `comprimento_min` → `programa`
+  e um `resumo` para conferir.
+- **Ambiente**: `piso` + `nome` → um piso com nome (mostra o nome no Rhino). Ligue na entrada
+  `piso` do Otimizar junto com os outros pisos; pisos sem nome contam como circulação.
+- **Otimizar** ganhou a entrada `programa` (a última, para os `.gh` antigos abrirem com as
+  entradas no lugar): ligue a saída do Lote e/ou do Programa (vários fios: juntados em ordem).
+  O painel `opcoes` aceita `necessidades = arquivo.json` (vem antes dos componentes).
+- Métricas: `programa.area_construida`, `ca`, `taxa_ocupacao`, `altura`, `recuo_min` (com o
+  lote) e `atendimento_programa`, `desvio_programa`, `eficiencia_planta`, `adjacencia`,
+  `distancia_ponderada` (com os ambientes). Ex.: `programa.ca <= 4`, `programa.recuo_min >= 3`.
+- O Otimizar GhPython (`otimizar_gh.py`) também entende os pisos do Ambiente e o
+  `necessidades =`; uma entrada `programa` só existe nele se for acrescentada à mão.
