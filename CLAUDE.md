@@ -129,7 +129,7 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
       5D (melhor que a busca aleatória com o mesmo orçamento), GA e CMA-ES; treliça Pratt
       com 1 objetivo (massa, utilização ≤ 100%) = ótimo da busca exaustiva (735 projetos)
       ou a < 1%. Rhino: sala com `max sol_luz.da`, `aplicar` leva ao melhor.
-    - [ ] 4f2 · Janela de Otimização (Eto), aberta pelo Otimizar: métricas do `GET /metricas`
+    - [x] 4f2 · Janela de Otimização (Eto), aberta pelo Otimizar: métricas do `GET /metricas`
       (unidade, sentido), 1 ou mais objetivos, min/max, restrições, nível, população,
       gerações; problema guardado no componente (salvo no .gh), entrada `problema` em texto
       sobrescreve. Gráficos num WebView com plotly.js (cópia local, versão fixa, sem
@@ -684,4 +684,10 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
   preso ao trocar de 2 para 3 objetivos. Testes C#: `test_cliente_cs.py` (catálogo, problema
   da janela usado na otimização de verdade, ida e volta do JSON, painel → janela, erros,
   painel opcoes manda, `/progresso` e `resultado.json` convertido = mesma frente).
-  Conferência no Rhino: `rhino/grasshopper/conferir_janela.py` (falta rodar para marcar a 4f2).
+  Conferência no Rhino: `rhino/grasshopper/conferir_janela.py`.
+- Conferido no Rhino 8 (2026-11-27, Otimiza.gha, sala de exemplo sem painel `problema`): a
+  janela abre no duplo clique, lista as métricas do servidor, e os objetivos marcados nela
+  (DA max, ASE min, UDI max) foram os da otimização (auto → NSGA-III, 48 × 20, rápido): 960
+  avaliações em 21,5 s (GH 14,7 ms/variante, GPU 1,4 ms). Gráficos no WebView2 do Rhino
+  atualizando por geração (convergência, Pareto 2D/3D, coordenadas paralelas); Aplicar levou a
+  solução aos sliders e à sala no Rhino; objetivos voltam ao reabrir o .gh salvo. Sem erros.
