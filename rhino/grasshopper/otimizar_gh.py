@@ -347,6 +347,8 @@ def pedido_base(op, problema):
              nivel=op.get("nivel", "rapido"), escala=escala_modelo(), materiais=materiais_de(op))
     if op.get("epw"):
         d["epw"] = op["epw"]
+    if op.get("fatores"):   # tabela de carbono/custo editada pelo usuario (copia do fatores.json)
+        d["carbono_custo"] = {"arquivo": op["fatores"]}
     return d
 
 

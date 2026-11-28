@@ -145,6 +145,7 @@ o lado do GH).
    | `mostrar` | nao | `sim` redesenha a vista a cada variante (mais lento) |
    | `porta` | 8765 | |
    | `rho_<rótulo>`, `tau_vidro` | os do HB | materiais |
+   | `fatores` | `fatores.json` do módulo | caminho de uma cópia editada da tabela de carbono/custo (`src/otimiza/modulos/carbono_custo/fatores.json`) |
    | `apoio`, `forca`, `trelica`, `gravidade` | articulado, 0,0,-10, nao, 9.81 | estrutura (kN) |
 
 5. `avaliar` avalia só a variante atual (confere se a geometria chega certa) e grava
@@ -217,12 +218,12 @@ contexto, entorno.
 | `GET /estado` | | `estado` (livre, gerando, avaliando, fim, erro), `rodada`, `parametros` (nomes), `geracao`, `geracoes`, `lote`, `faltam`, `avaliacoes`, `no_cache`, `erro`, `arquivo`, tempos |
 | `GET /metricas` | | `{"metricas": {modulo: {metrica: {unidade, sentido, descricao}}}}` |
 | `GET /progresso` | `?desde=g` (opcional) | o mesmo do `/estado` + `parametros_espaco`, `objetivos` [{nome, sentido}], `geracoes_registradas`, `historico` (por geração a partir de `desde`: `avaliacoes`, `viaveis`, `n_frente`, `melhor` por objetivo, `hipervolume` com normalização fixa da 1ª geração; 1 objetivo: null), `frente` (até 300: `indice`, `geracao`, `cluster`, `objetivos` em lista, `parametros`), `n_frente`. Usado pelos gráficos da janela de Otimização (4f2); só acrescentado, versão continua 1 |
-| `POST /iniciar` | `parametros`, `problema`, `nivel`, `algoritmo`, `populacao`, `geracoes`, `semente`, `epw`, `escala`, `materiais`, `fixas`, `caso`, `saida`, `cliente`, `reatribuir_s` | estado (substitui a otimização anterior) |
+| `POST /iniciar` | `parametros`, `problema`, `nivel`, `algoritmo`, `populacao`, `geracoes`, `semente`, `epw`, `escala`, `materiais`, `fixas`, `carbono_custo`, `caso`, `saida`, `cliente`, `reatribuir_s` | estado (substitui a otimização anterior) |
 | `POST /tarefas` | `{"maximo": 16}` (0 = todas) | estado + `tarefas: [{"id", "parametros": {nome: valor}}]`; lista vazia = aguardar (GPU avaliando ou outro cliente terminando) |
 | `POST /resultados` | `{"resultados": [{"id", "geometria", "tempo_s"?} \| {"id", "erro"}]}` | estado + `aceitos`, `erros` |
 | `POST /parar` | | estado (grava o que já foi avaliado) |
 | `POST /devolver` | `{"ids": [...]}` | estado + `devolvidas`: tarefas pegas e não feitas voltam já à fila |
-| `POST /avaliar` | `geometrias: [...]`, `metricas` ou `problema`, `nivel`, `epw`, `escala`, `materiais`, `fixas` | `{"valores": {"modulo.metrica": [...]}, "tempo_s"}` |
+| `POST /avaliar` | `geometrias: [...]`, `metricas` ou `problema`, `nivel`, `epw`, `escala`, `materiais`, `fixas`, `carbono_custo` | `{"valores": {"modulo.metrica": [...]}, "tempo_s"}` |
 | `POST /encerrar` | | desliga o servidor |
 
 - `parametros`: `[{"nome", "tipo": "continuo", "minimo", "maximo", "casas"?} |
@@ -232,7 +233,10 @@ contexto, entorno.
 - `escala`: unidade do modelo → metro (mm = 0,001). `materiais`: `{"fachada":
   {"rho": 0.5}, "vidro": {"tau": 0.64, "fs": 0.42}}` (`fs` = fator solar, usado no
   `termico.ganho_solar`). `fixas`: `{"malhas": {"contexto": ...}}`,
-  juntadas a toda variante. `cliente`: qualquer JSON, gravado em
+  juntadas a toda variante. `carbono_custo` (opcional, só acrescentado ao v1): trocas na
+  tabela do módulo carbono_custo, `{"arquivo": "C:/.../meus_fatores.json", "anos": 30,
+  "energia": {"tarifa": 0.95}, "materiais": {"aco": {"kgco2e_kg": 1.2}}}` (o arquivo
+  primeiro, depois o resto; chave desconhecida = erro). `cliente`: qualquer JSON, gravado em
   `resultado.json → info.cliente` (o GH guarda o GUID de cada slider para o `aplicar`).
 - Ciclo do cliente: `POST /iniciar` → repetir { `POST /tarefas` → gerar → `POST
   /resultados` } até `estado` = `fim` ou `erro`. O `id` traz a rodada (nº da otimização

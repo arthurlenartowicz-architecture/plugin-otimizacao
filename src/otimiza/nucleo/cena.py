@@ -48,6 +48,7 @@ class CenaLote:
     clima: Clima
     device: str = field(default_factory=dispositivo_padrao)
     estruturas: list | None = None   # uma Estrutura (modulos.estrutura.fem) por variante
+    opcoes: dict = field(default_factory=dict)  # ajustes por módulo, ex.: {"carbono_custo": {...}}
     _cena: Cena | None = None
     _sem_projeto: Cena | None = None
 

@@ -69,6 +69,12 @@ namespace Otimiza.Cliente
             return mat;
         }
 
+        /// <summary>fatores = caminho.json (cópia editada do fatores.json do carbono_custo)
+        /// → {"arquivo": caminho}; null sem a chave.</summary>
+        public JsonObject? CarbonoCusto() =>
+            Tem("fatores") && Texto("fatores", "") != ""
+                ? new JsonObject { ["arquivo"] = Texto("fatores", "") } : null;
+
         /// <summary>"0,0,-10" ou "0;0;-10" → [0, 0, -10].</summary>
         public double[] Vetor(string k, string padrao) =>
             Texto(k, padrao).Replace(";", ",").Split(',')

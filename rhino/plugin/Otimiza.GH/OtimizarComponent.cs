@@ -145,6 +145,8 @@ namespace Otimiza.GH
                 ["materiais"] = op.Materiais(),
             };
             if (op.Tem("epw")) d["epw"] = op.Texto("epw", "");
+            var cc = op.CarbonoCusto();
+            if (cc != null) d["carbono_custo"] = cc;
             return d;
         }
 

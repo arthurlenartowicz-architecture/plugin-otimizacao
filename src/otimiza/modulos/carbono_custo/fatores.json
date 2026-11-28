@@ -1,0 +1,43 @@
+{
+  "_leia": "Tabela padrão do módulo carbono_custo. Para trocar valores: copie este arquivo, edite e aponte no painel opcoes do Otimizar (fatores = C:\\caminho\\meus_fatores.json), ou mande só o que muda no campo 'carbono_custo' do /iniciar ou /avaliar. Cada valor novo substitui o daqui; chaves desconhecidas dão erro. Campos 'fonte' são só informativos.",
+  "anos": 50,
+  "taxa_desconto": 0.04,
+  "materiais": {
+    "tijolo":        {"kgco2e_kg": 0.213, "fonte": "ICE v3.0 (Bath/Circular Ecology, 2019): Bricks, general (clay)"},
+    "concreto_leve": {"kgco2e_kg": 0.28,  "fonte": "ICE v3.0: bloco de concreto leve/aerado (aircrete) — aproximação para o Generic LW Concrete do Honeybee"},
+    "concreto":      {"kgco2e_kg": 0.103, "fonte": "ICE v3.0: Concrete, general"},
+    "isolante":      {"kgco2e_kg": 3.29,  "fonte": "ICE v3.0: Expanded polystyrene (EPS) — o Generic 50mm Insulation do Honeybee (λ 0,03) não diz o material"},
+    "gesso":         {"kgco2e_kg": 0.39,  "fonte": "ICE v3.0: Plasterboard"},
+    "manta":         {"kgco2e_kg": 0.43,  "fonte": "ICE v3.0: Bitumen (membrana da cobertura)"},
+    "forro":         {"kgco2e_kg": 1.28,  "fonte": "ICE v3.0: Mineral wool — aproximação para o forro acústico (Generic Acoustic Tile)"},
+    "vidro":         {"kgco2e_kg": 1.44,  "fonte": "ICE v3.0: Glass, general"},
+    "aco":           {"kgco2e_kg": 1.55,  "fonte": "ICE v3.0: Steel section, world average"},
+    "ar":            {"kgco2e_kg": 0.0,   "fonte": "câmara de ar"}
+  },
+  "construcoes": {
+    "_leia": "Mesmas camadas das CONSTRUCOES do modulos/termico/rc.py (genéricas do Honeybee): [material, espessura m, densidade kg/m³], de fora para dentro.",
+    "parede":       [["tijolo", 0.1, 1920], ["concreto_leve", 0.1, 1280], ["isolante", 0.05, 43],
+                     ["ar", 0.1, 1.28], ["gesso", 0.0127, 800]],
+    "cobertura":    [["manta", 0.01, 1120], ["isolante", 0.05, 43], ["concreto_leve", 0.1, 1280],
+                     ["ar", 0.1, 1.28], ["forro", 0.02, 368]],
+    "piso_solo":    [["isolante", 0.05, 43], ["concreto", 0.2, 2240]],
+    "piso_interno": [["forro", 0.02, 368], ["ar", 0.1, 1.28], ["concreto_leve", 0.1, 1280]],
+    "vidro":        [["vidro", 0.006, 2500], ["ar", 0.0127, 1.28], ["vidro", 0.006, 2500]]
+  },
+  "estrutura": {"material": "aco", "_leia": "barras do módulo estrutura: massa (kg) × fator deste material"},
+  "custo": {
+    "_leia": "R$ por m² de elemento (material + mão de obra) e R$/kg de aço montado. VALORES DE ORDEM DE GRANDEZA, NÃO CONFERIDOS: calibrar com o SINAPI-PR (composições do mês) antes de usar no TCC.",
+    "parede": 250.0,
+    "cobertura": 350.0,
+    "piso_solo": 200.0,
+    "piso_interno": 300.0,
+    "vidro": 1200.0,
+    "aco_kg": 18.0
+  },
+  "energia": {
+    "kgco2e_kwh": 0.0385,
+    "fonte_kgco2e_kwh": "MCTI, fator médio anual do SIN 2023 (38,5 kgCO2/MWh); a partir de 2025 o MCTI mudou a base de cálculo (fatores mensais no SIRENE)",
+    "tarifa": 0.85,
+    "fonte_tarifa": "R$/kWh com impostos, ORDEM DE GRANDEZA (tarifa B1 da Copel); conferir a tarifa vigente"
+  }
+}

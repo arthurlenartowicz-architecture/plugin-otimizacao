@@ -143,7 +143,10 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
       frente final = `resultado.json`; solução → valores dos sliders. Rhino: sala 48 × 20,
       gráficos andando por geração, clicar em 3 pontos e conferir sliders/geometria; mesma
       solução na janela e no `pareto.gh`.
-    - [ ] 4d e 4e (ver acima), entram na janela automaticamente pelo `/metricas`.
+    - [x] 4d · módulo `carbono_custo`: carbono incorporado (A1–A3) e operacional, total em N
+      anos, custo de construção, operação e ciclo de vida; tabela `fatores.json` editável
+      (painel `fatores =` ou campo `carbono_custo` do protocolo). Entra na janela pelo `/metricas`.
+    - [ ] 4e (ver acima), entra na janela automaticamente pelo `/metricas`.
     - [ ] 4f3 · Componentes do GH: Clima (EPW, local), Entorno e Edifício (geometria + rótulo
       → objeto Cena), Genes (sliders/Value Lists ligados = genoma), um de análise por módulo
       (`/avaliar` na hora). Otimizar aceita Cena + Genes e mantém as entradas atuais.
@@ -691,3 +694,36 @@ PhysicsNeMo (IA) · pymoo (otimização) · C# / RhinoCommon / Eto.Forms (plugin
   avaliações em 21,5 s (GH 14,7 ms/variante, GPU 1,4 ms). Gráficos no WebView2 do Rhino
   atualizando por geração (convergência, Pareto 2D/3D, coordenadas paralelas); Aplicar levou a
   solução aos sliders e à sala no Rhino; objetivos voltam ao reabrir o .gh salvo. Sem erros.
+- 4d (2026-11-28), módulo `carbono_custo` (`modulos/carbono_custo/`, sem pacote novo). Métricas:
+  carbono_incorporado (kgCO2e) e _m2 (÷ área de piso), carbono_operacional (kgCO2e/ano =
+  `termico.consumo` × fator da rede), carbono_total (incorporado + N × operacional, sem desconto),
+  custo_construcao (R$) e _m2, custo_operacional (R$/ano = consumo × tarifa), custo_ciclo_vida
+  (construção + operação a valor presente, Σ 1/(1+i)^t). Sem GPU: os três níveis dão o mesmo valor.
+  Áreas = as do RC (`zona.geometria_rc`): parede = fachada, vidro, cobertura, piso na base = piso no
+  solo, pisos acima = lajes (1×; o RC conta 2× por ter massa dos dois lados). Faces interno/contexto/
+  entorno e esquadrias não entram. Estrutura: massa das barras (`Estrutura.massa`, a mesma do
+  módulo estrutura) × fator do aço. `precisa`: só as métricas de operação pedem `termico.consumo`
+  (incorporado e construção não rodam termico nem sol_luz e não precisam de EPW no servidor).
+- Fatores (`fatores.json`, versionado, fonte por item): camadas = as `CONSTRUCOES` do `rc.py`
+  [material, espessura, densidade] (teste confere), vidro duplo 2 × 6 mm. Carbono ICE v3.0 (2019,
+  Bath/Circular Ecology): tijolo 0,213; concreto leve (aircrete) 0,28; concreto geral 0,103; EPS
+  3,29; gesso 0,39; manta (betume) 0,43; forro ≈ lã mineral 1,28; vidro 1,44; aço perfil 1,55
+  kgCO2e/kg. Conferidos em fonte secundária só aço 1,55 e gesso 0,39 (não achei a planilha do ICE
+  aberta; a versão 4.x mudou alguns, ex.: vidro float ~0,85): conferir na planilha antes do texto
+  final do TCC. SIDAC (valores brasileiros) não comparado ainda. Rede: 0,0385 kgCO2/kWh = MCTI, SIN
+  2023 (desde 2025 o MCTI usa outra base, fatores mensais no SIRENE). Custos (R$/m² parede 250,
+  cobertura 350, piso solo 200, laje 300, vidro 1200, aço R$ 18/kg) e tarifa R$ 0,85/kWh são ORDEM DE
+  GRANDEZA, não conferidos: calibrar com SINAPI-PR e a tarifa da Copel. N = 50 anos, i = 4% real.
+- Trocas do usuário: `fatores_de(opcoes)` = padrão ← `arquivo` (cópia editada) ← resto do dicionário;
+  chave desconhecida = erro (material novo só em `materiais`). Chegam ao módulo por `CenaLote.opcoes`
+  (campo novo, `{"carbono_custo": {...}}`; o cache não serve: é compartilhado entre otimizações).
+  Protocolo: campo opcional `carbono_custo` no `/iniciar` e `/avaliar` (só acrescentado, versão 1);
+  painel `opcoes` do Otimizar: `fatores = caminho.json` → `{"arquivo": caminho}` (GhPython e C#).
+- Validação 4d (`testes/test_carbono_custo.py`): conta à mão com os números da tabela escritos no
+  teste (sala 6×8×3, janela N 40%: parede 76,8 m² × 87,77, vidro 7,2 × 43,2, cobertura 48 × 57,15,
+  piso 48 × 53,22 kgCO2e/m²; laje a meia altura +48 × 45,26), treliça Pratt = massa do módulo
+  estrutura (validada contra o Karamba) × 1,55 e × R$ 18, operação e valor presente (anuidade
+  50 anos a 4% = 21,4822), trocas por arquivo/dicionário e erros, `precisa` sem termico, operacional
+  pelo motor com o termico de verdade, servidor (`/metricas`, campo `carbono_custo`, sem EPW).
+  Tolerância 1e-9 relativa (aritmética). Comparação com EC3/One Click LCA não feita: serviços online
+  com conta, fora do ambiente.

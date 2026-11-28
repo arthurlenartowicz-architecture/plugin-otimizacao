@@ -36,6 +36,7 @@ def carregar_modulos():
     import otimiza.modulos.estrutura  # noqa: F401
     import otimiza.modulos.sol_luz  # noqa: F401
     import otimiza.modulos.termico  # noqa: F401
+    import otimiza.modulos.carbono_custo  # noqa: F401
 
 
 def metricas() -> dict:
@@ -74,23 +75,24 @@ class Servico:
         return self.climas[epw]
 
     # ---------------------------------------------------------------- avaliação
-    def avaliar_objetos(self, objetos: list, chaves: list[str], nivel: str, clima, cache):
+    def avaliar_objetos(self, objetos: list, chaves: list[str], nivel: str, clima, cache,
+                        opcoes: dict | None = None):
         """Roda na thread da GPU: {"modulo.metrica": array (n,)} ."""
         from otimiza.nucleo.motor import avaliar
-        cena = self._cena(objetos, clima)
+        cena = self._cena(objetos, clima, opcoes)
         cache.resultados.clear()
         vals = avaliar(cena, chaves, nivel, cache)
         return {k: v.detach().double().cpu().numpy() for k, v in vals.items()}
 
     @staticmethod
-    def _cena(objetos, clima):
+    def _cena(objetos, clima, opcoes: dict | None = None):
         from otimiza.modulos.estrutura.fem import Estrutura
         from otimiza.nucleo.cena import CenaLote
         if all(isinstance(o, Estrutura) for o in objetos):
-            return CenaLote(variantes=[], clima=clima, estruturas=objetos)
+            return CenaLote(variantes=[], clima=clima, estruturas=objetos, opcoes=dict(opcoes or {}))
         if any(isinstance(o, Estrutura) for o in objetos):
             raise pr.ErroProtocolo("lote misturando malhas e estruturas")
-        return CenaLote(variantes=objetos, clima=clima)
+        return CenaLote(variantes=objetos, clima=clima, opcoes=dict(opcoes or {}))
 
     def avaliar(self, pedido: dict) -> dict:
         """Avaliação avulsa (sem otimizar): {"geometrias": [...], "metricas": [...]}."""
@@ -102,7 +104,7 @@ class Servico:
         chaves = pedido.get("metricas") or cfg.problema.metricas()
         t0 = time.perf_counter()
         vals = self.gpu.submit(self.avaliar_objetos, objs, chaves, cfg.nivel, cfg.clima,
-                               cfg.cache).result()
+                               cfg.cache, cfg.opcoes).result()
         return dict(valores={k: [None if not np.isfinite(x) else float(x) for x in v]
                              for k, v in vals.items()},
                     tempo_s=round(time.perf_counter() - t0, 4))
@@ -166,7 +168,19 @@ class Config:
                            for m in (x if isinstance(x, list) else [x]) if m]
                        for r, x in fixas.items()} if fixas else None)
         chaves = self.problema.metricas() if self.problema else list(d.get("metricas", []))
-        precisa_clima = any(not c.startswith("estrutura.") for c in chaves)
+        # ajustes por módulo (só acrescentado ao v1): "carbono_custo": {"arquivo": ..., "anos": ...}
+        self.opcoes = {}
+        if d.get("carbono_custo"):
+            from otimiza.modulos.carbono_custo.fatores import fatores_de
+            try:
+                fatores_de(d["carbono_custo"])       # valida já
+            except (ValueError, TypeError, KeyError) as e:
+                raise pr.ErroProtocolo(str(e)) from None
+            self.opcoes["carbono_custo"] = d["carbono_custo"]
+        from otimiza.modulos.carbono_custo.modulo import SEM_CLIMA
+        precisa_clima = any(not (c.startswith("estrutura.") or
+                                 (c.startswith("carbono_custo.") and c.split(".")[1] in SEM_CLIMA))
+                            for c in chaves)
         self.clima, self.cache = servico.clima(d.get("epw")) if precisa_clima else (None, None)
         if self.cache is None:
             from otimiza.nucleo.cache import Cache
@@ -315,7 +329,8 @@ class Otimizacao:
             t0 = time.perf_counter()
             if idx:
                 from otimiza.nucleo.motor import avaliar_problema
-                cena = self.servico._cena([self.recebidos[i][0] for i in idx], self.cfg.clima)
+                cena = self.servico._cena([self.recebidos[i][0] for i in idx], self.cfg.clima,
+                                          self.cfg.opcoes)
                 self.cfg.cache.resultados.clear()
                 F_t, v_t = avaliar_problema(cena, self.cfg.problema, self.cfg.nivel, self.cfg.cache)
                 F_novo = F_t.detach().double().cpu().numpy()

@@ -115,6 +115,9 @@ static class Programa
             ["erros_ga_dois"] = Lista(gaDois.Validar().ToArray()),
             ["auto"] = Lista(Configuracao.AlgoritmoAuto(1), Configuracao.AlgoritmoAuto(2), Configuracao.AlgoritmoAuto(3)),
             ["opcoes_populacao"] = opMisto.Int("populacao", 0), ["opcoes_nivel"] = opMisto.Texto("nivel", ""),
+            // painel "fatores = ..." → campo carbono_custo do pedido (4d)
+            ["fatores"] = Opcoes.De(new[] { "fatores = C:/x/meus.json" }).CarbonoCusto()?.ToJsonString(),
+            ["sem_fatores"] = Opcoes.De(new[] { "nivel = rapido" }).CarbonoCusto() == null,
         };
         var genoma = new JsonArray(nomes.Select(n => (JsonNode)new JsonObject
         { ["nome"] = n, ["guid"] = "guid-" + n, ["tipo"] = "x" }).ToArray());

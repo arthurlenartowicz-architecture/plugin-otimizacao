@@ -134,6 +134,8 @@ def test_cliente_cs_contra_servidor(programa, servidor, tmp_path):
     assert any("ga é para 1 objetivo" in e for e in j["erros_ga_dois"])
     assert j["auto"] == ["ga", "nsga2", "nsga3"]
     assert j["opcoes_populacao"] == 99 and j["opcoes_nivel"] == "rapido"     # o painel manda
+    assert cat["carbono_custo.carbono_total"]["unidade"] == "kgCO2e"           # 4d no catálogo
+    assert json.loads(j["fatores"]) == {"arquivo": "C:/x/meus.json"} and j["sem_fatores"]
     pg = rel["progresso"]
     assert pg["estado"] == "fim" and pg["geracoes_registradas"] == 4 and len(pg["historico"]) == 4
     hv = [h["hipervolume"] for h in pg["historico"]]
